@@ -122,6 +122,11 @@ library OszillorErrors {
     /// @param messageType The unknown message type identifier.
     error UnknownMessageType(uint8 messageType);
 
+    // ──────────────────── System State ────────────────────
+
+    /// @notice The system is paused; CRE reports cannot be processed.
+    error SystemPaused();
+
     // ──────────────────── Donation Attack ────────────────────
 
     /// @notice Direct token transfer to the vault detected outside deposit flow.
