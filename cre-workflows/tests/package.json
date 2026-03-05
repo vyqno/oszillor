@@ -1,0 +1,9 @@
+{
+  "name": "oszillor-cre-tests",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "^1.2.21",
+    "viem": "^2.47.0"
+  }
+}
