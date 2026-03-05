@@ -1,0 +1,11 @@
+{
+  "schedule": "*/60 * * * * *",
+  "defiLlamaUrl": "https://api.llama.fi/protocols",
+  "evms": [
+    {
+      "chainName": "base",
+      "riskEngineAddress": "0x0000000000000000000000000000000000000003",
+      "gasLimit": "500000"
+    }
+  ]
+}

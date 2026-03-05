@@ -1,0 +1,17 @@
+# ==========================================================================
+# CRE PROJECT SETTINGS FILE
+# ==========================================================================
+# Shared configuration for all OSZILLOR CRE workflows.
+# RPCs are per-environment. Use --target flag to select.
+
+staging-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia
+      url: https://ethereum-sepolia-rpc.publicnode.com
+
+production-settings:
+  rpcs:
+    - chain-name: base
+      url: https://mainnet.base.org
+    - chain-name: arbitrum
+      url: https://arb1.arbitrum.io/rpc

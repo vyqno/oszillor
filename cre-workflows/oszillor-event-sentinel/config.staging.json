@@ -1,0 +1,13 @@
+{
+  "schedule": "*/30 * * * * *",
+  "whaleAlertUrl": "https://api.llama.fi/stablecoins",
+  "tvlThresholdDropPct": 10,
+  "largeTransferThresholdUsd": 10000000,
+  "evms": [
+    {
+      "chainName": "ethereum-testnet-sepolia",
+      "eventSentinelAddress": "0x0000000000000000000000000000000000000004",
+      "gasLimit": "500000"
+    }
+  ]
+}

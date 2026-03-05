@@ -1,0 +1,18 @@
+# ==========================================================================
+# OSZILLOR Rebase Executor — CRE Workflow Settings
+# ==========================================================================
+staging-settings:
+  user-workflow:
+    workflow-name: "oszillor-rebase-executor-staging"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.staging.json"
+    secrets-path: ""
+
+production-settings:
+  user-workflow:
+    workflow-name: "oszillor-rebase-executor-production"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: ""
