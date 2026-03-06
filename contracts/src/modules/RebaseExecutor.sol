@@ -6,7 +6,7 @@ import {CREReceiver} from "./CREReceiver.sol";
 import {IOszillorVault} from "../interfaces/IOszillorVault.sol";
 import {OszillorErrors} from "../libraries/OszillorErrors.sol";
 import {RiskMath} from "../libraries/RiskMath.sol";
-import {RebaseReport} from "../libraries/DataStructures.sol";
+import {RebalanceReport} from "../libraries/DataStructures.sol";
 
 /// @title RebaseExecutor
 /// @author Hitesh (vyqno)
@@ -17,11 +17,11 @@ import {RebaseReport} from "../libraries/DataStructures.sol";
 contract RebaseExecutor is CREReceiver {
     // ──────────────────── Events ────────────────────
 
-    /// @notice Emitted when a rebase report is processed.
+    /// @notice Emitted when a rebalance + rebase report is processed.
     /// @param factor The rebase factor applied.
+    /// @param targetEthPct Target ETH allocation in bps.
     /// @param riskScore Risk score at time of rebase.
-    /// @param weightedApyBps Weighted APY used in factor calculation.
-    event RebaseReportProcessed(uint256 factor, uint256 riskScore, uint256 weightedApyBps);
+    event RebalanceReportProcessed(uint256 factor, uint256 targetEthPct, uint256 riskScore);
 
     // ──────────────────── State ────────────────────
 
@@ -50,32 +50,35 @@ contract RebaseExecutor is CREReceiver {
         pauseChecker = _pauseChecker;
     }
 
-    /// @notice Processes a validated W3 rebase report.
-    /// @dev Validates factor bounds, checks pause state, then calls vault.triggerRebase().
-    /// @param report ABI-encoded RebaseReport struct.
+    /// @notice Processes a validated W3 rebalance + rebase report.
+    /// @dev Validates factor bounds, checks pause state, then calls vault.rebalance()
+    ///      followed by vault.triggerRebase(). Rebalance adjusts ETH/USDC ratio first,
+    ///      then rebase adjusts the token index based on NAV change.
+    /// @param report ABI-encoded RebalanceReport struct.
     function _handleReport(bytes calldata report) internal override {
         // HIGH-08: Check pause state
         _requireNotPaused();
 
-        // Decode the report
-        RebaseReport memory rebaseReport = abi.decode(report, (RebaseReport));
+        // Decode the v2 report
+        RebalanceReport memory r = abi.decode(report, (RebalanceReport));
 
         // Validate factor bounds (CRIT-02 fix enforced here and in token)
         if (
-            rebaseReport.rebaseFactor < RiskMath.MIN_REBASE_FACTOR
-                || rebaseReport.rebaseFactor > RiskMath.MAX_REBASE_FACTOR
+            r.rebaseFactor < RiskMath.MIN_REBASE_FACTOR
+                || r.rebaseFactor > RiskMath.MAX_REBASE_FACTOR
         ) {
             revert OszillorErrors.RebaseFactorOutOfBounds(
-                rebaseReport.rebaseFactor, RiskMath.MIN_REBASE_FACTOR, RiskMath.MAX_REBASE_FACTOR
+                r.rebaseFactor, RiskMath.MIN_REBASE_FACTOR, RiskMath.MAX_REBASE_FACTOR
             );
         }
 
-        // Trigger rebase via typed vault interface
-        vault.triggerRebase(rebaseReport.rebaseFactor);
+        // Step 1: Rebalance portfolio (adjust ETH/USDC ratio)
+        vault.rebalance(r.targetEthPct);
 
-        emit RebaseReportProcessed(
-            rebaseReport.rebaseFactor, rebaseReport.currentRiskScore, rebaseReport.weightedApyBps
-        );
+        // Step 2: Trigger rebase (adjust token index based on NAV change)
+        vault.triggerRebase(r.rebaseFactor);
+
+        emit RebalanceReportProcessed(r.rebaseFactor, r.targetEthPct, r.currentRiskScore);
     }
 
     /// @notice Checks that the pause-checker contract is not paused.

@@ -64,4 +64,13 @@ interface ISpokePeer is IOszillorPeer {
     /// @notice Returns the current risk level on this spoke (derived from synced state).
     /// @return The risk level tier.
     function spokeRiskLevel() external view returns (RiskLevel);
+
+    // ──────────────────── Enforcement ────────────────────
+
+    /// @notice Reverts if deposits should be blocked (stale state or emergency). CRIT-04.
+    function checkDepositAllowed() external view;
+
+    /// @notice Reverts if withdrawals should be blocked (index divergence). MED-01.
+    /// @param localRebaseIndex The spoke token's current rebaseIndex.
+    function checkWithdrawalAllowed(uint256 localRebaseIndex) external view;
 }

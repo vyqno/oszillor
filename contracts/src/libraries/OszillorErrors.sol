@@ -127,6 +127,25 @@ library OszillorErrors {
     /// @notice The system is paused; CRE reports cannot be processed.
     error SystemPaused();
 
+    // ──────────────────── Strategy ────────────────────
+
+    /// @notice A Uniswap swap exceeded the maximum allowed slippage.
+    /// @param expectedOut Expected output amount from Chainlink price.
+    /// @param actualOut Actual output amount received.
+    error SlippageTooHigh(uint256 expectedOut, uint256 actualOut);
+
+    /// @notice The target ETH allocation is invalid (must be 0-10000 bps).
+    /// @param targetBps The invalid target provided.
+    error InvalidTargetAllocation(uint256 targetBps);
+
+    /// @notice The strategy contract is paused and cannot execute rebalances.
+    error StrategyPaused();
+
+    /// @notice The Chainlink price feed returned a stale or invalid answer.
+    /// @param updatedAt Timestamp of the last feed update.
+    /// @param maxAge Maximum allowed staleness in seconds.
+    error StalePriceFeed(uint256 updatedAt, uint256 maxAge);
+
     // ──────────────────── Donation Attack ────────────────────
 
     /// @notice Direct token transfer to the vault detected outside deposit flow.

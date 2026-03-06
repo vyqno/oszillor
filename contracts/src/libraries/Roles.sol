@@ -33,4 +33,7 @@ library Roles {
 
     /// @notice Treasury multisig — can withdraw accrued protocol fees.
     bytes32 internal constant FEE_WITHDRAWER_ROLE = keccak256("FEE_WITHDRAWER_ROLE");
+
+    /// @notice Granted to OszillorVault — sole authority to call VaultStrategy.rebalance().
+    bytes32 internal constant STRATEGY_MANAGER_ROLE = keccak256("STRATEGY_MANAGER_ROLE");
 }

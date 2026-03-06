@@ -104,6 +104,22 @@ interface IOszillorVault {
     /// @dev Callable only by EMERGENCY_UNPAUSER_ROLE.
     function exitEmergencyMode() external;
 
+    // ──────────────────── Strategy (v2) ────────────────────
+
+    /// @notice Emitted when the vault triggers a portfolio rebalance.
+    /// @param targetEthPct Target ETH allocation in bps.
+    /// @param actualEthPct Resulting ETH allocation after rebalance.
+    event Rebalanced(uint256 targetEthPct, uint256 actualEthPct);
+
+    /// @notice Delegates to VaultStrategy to adjust the ETH/USDC ratio.
+    /// @dev Callable only by REBASE_EXECUTOR_ROLE (CRE W3 via RebaseExecutor).
+    /// @param targetEthPct Target ETH allocation in bps (10000 = 100%).
+    function rebalance(uint256 targetEthPct) external;
+
+    /// @notice Returns the total NAV of the vault in WETH terms.
+    /// @dev Includes WETH held + stETH value + USDC converted via Chainlink.
+    function totalNav() external view returns (uint256);
+
     // ──────────────────── View ────────────────────
 
     /// @notice Returns the current risk score (0-100).

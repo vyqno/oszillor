@@ -89,7 +89,7 @@ struct ThreatReport {
     string reason;
 }
 
-/// @notice CRE W3 rebase execution report.
+/// @notice CRE W3 rebase execution report (v1 — kept for backward compatibility in tests).
 /// @param rebaseFactor Multiplicative factor to apply (1e18 precision).
 /// @param currentRiskScore Risk score at time of calculation.
 /// @param weightedApyBps Weighted APY across all allocations in basis points.
@@ -97,6 +97,20 @@ struct ThreatReport {
 struct RebaseReport {
     uint256 rebaseFactor;
     uint256 currentRiskScore;
+    uint256 weightedApyBps;
+    uint256 timeDelta;
+}
+
+/// @notice CRE W3 rebalance + rebase report (v2).
+/// @param rebaseFactor Multiplicative factor to apply (1e18 precision).
+/// @param currentRiskScore Risk score at time of calculation.
+/// @param targetEthPct Target ETH allocation in bps (10000 = 100%).
+/// @param weightedApyBps Staking APY for rebase calc in basis points.
+/// @param timeDelta Seconds elapsed since last rebase.
+struct RebalanceReport {
+    uint256 rebaseFactor;
+    uint256 currentRiskScore;
+    uint256 targetEthPct;
     uint256 weightedApyBps;
     uint256 timeDelta;
 }
