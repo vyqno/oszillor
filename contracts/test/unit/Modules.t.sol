@@ -7,7 +7,7 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 import {Roles} from "../../src/libraries/Roles.sol";
 import {OszillorErrors} from "../../src/libraries/OszillorErrors.sol";
 import {RiskMath} from "../../src/libraries/RiskMath.sol";
-import {RiskReport, RebaseReport, ThreatReport, Allocation, RiskLevel} from "../../src/libraries/DataStructures.sol";
+import {RiskReport, RebaseReport, RebalanceReport, ThreatReport, Allocation, RiskLevel} from "../../src/libraries/DataStructures.sol";
 
 import {ConcretePausableAC} from "../mocks/ConcretePausableAC.sol";
 import {ConcreteOszillorFees} from "../mocks/ConcreteOszillorFees.sol";
@@ -636,9 +636,11 @@ contract ModulesTest is Test {
         uint256 weightedApyBps,
         uint256 timeDelta
     ) internal pure returns (bytes memory) {
-        RebaseReport memory rr = RebaseReport({
+        // v2: RebaseExecutor now decodes RebalanceReport (adds targetEthPct)
+        RebalanceReport memory rr = RebalanceReport({
             rebaseFactor: factor,
             currentRiskScore: riskScore,
+            targetEthPct: 10_000, // default 100% ETH for existing tests
             weightedApyBps: weightedApyBps,
             timeDelta: timeDelta
         });

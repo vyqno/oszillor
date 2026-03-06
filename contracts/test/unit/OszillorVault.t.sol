@@ -14,6 +14,7 @@ import {ShareMath} from "../../src/libraries/ShareMath.sol";
 import {OszillorErrors} from "../../src/libraries/OszillorErrors.sol";
 import {RiskLevel, RiskState, Allocation} from "../../src/libraries/DataStructures.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
+import {MockStrategy} from "../mocks/MockStrategy.sol";
 
 /// @title OszillorVaultTest
 /// @author Hitesh (vyqno)
@@ -22,6 +23,7 @@ contract OszillorVaultTest is Test {
     OszillorVault vault;
     OszillorToken token;
     MockERC20 usdc;
+    MockStrategy strategy;
 
     // ──────────────────── Actors ────────────────────
     address admin = makeAddr("admin");
@@ -40,6 +42,7 @@ contract OszillorVaultTest is Test {
         vm.warp(1_700_000_000);
 
         usdc = new MockERC20();
+        strategy = new MockStrategy();
 
         vm.startPrank(admin);
 
@@ -53,6 +56,7 @@ contract OszillorVaultTest is Test {
             riskEngine,
             rebaseExecutor,
             sentinel,
+            address(strategy),
             admin,
             feeRecipient
         );
@@ -70,8 +74,8 @@ contract OszillorVaultTest is Test {
         vm.stopPrank();
 
         // Fund users with USDC
-        usdc.mint(alice, 1_000_000e6);
-        usdc.mint(bob, 1_000_000e6);
+        usdc.mint(alice, 1_000_000e18);
+        usdc.mint(bob, 1_000_000e18);
 
         // Users approve vault
         vm.prank(alice);
@@ -138,33 +142,33 @@ contract OszillorVaultTest is Test {
 
     function test_deposit_basic() public {
         vm.prank(alice);
-        uint256 shares = vault.deposit(100e6);
+        uint256 shares = vault.deposit(100e18);
 
         assertGt(shares, 0);
-        assertEq(vault.totalAssets(), 100e6);
-        assertEq(usdc.balanceOf(address(vault)), 100e6);
+        assertEq(vault.totalAssets(), 100e18);
+        assertEq(usdc.balanceOf(address(vault)), 100e18);
         assertGt(token.sharesOf(alice), 0);
     }
 
     function test_deposit_emitsEvent() public {
         vm.prank(alice);
         vm.expectEmit(true, false, false, false, address(vault));
-        emit IOszillorVault.Deposit(alice, 100e6, 0); // shares value not checked
-        vault.deposit(100e6);
+        emit IOszillorVault.Deposit(alice, 100e18, 0); // shares value not checked
+        vault.deposit(100e18);
     }
 
     function test_deposit_minDeposit_revertsBelow() public {
-        // MED-04: Minimum deposit = 1e6 (1 USDC)
+        // MED-04: Minimum deposit = 1e15
         vm.prank(alice);
         vm.expectRevert(
-            abi.encodeWithSelector(OszillorErrors.DepositTooSmall.selector, 999_999, 1e6)
+            abi.encodeWithSelector(OszillorErrors.DepositTooSmall.selector, 1e15 - 1, 1e15)
         );
-        vault.deposit(999_999);
+        vault.deposit(1e15 - 1);
     }
 
     function test_deposit_minDeposit_exactlyMin() public {
         vm.prank(alice);
-        uint256 shares = vault.deposit(1e6);
+        uint256 shares = vault.deposit(1e15);
         assertGt(shares, 0);
     }
 
@@ -175,7 +179,7 @@ contract OszillorVaultTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(OszillorErrors.EmergencyModeActive.selector);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
     }
 
     function test_deposit_staleness_reverts() public {
@@ -184,27 +188,27 @@ contract OszillorVaultTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(); // RiskStateTooStale
-        vault.deposit(100e6);
+        vault.deposit(100e18);
     }
 
     function test_deposit_multipleDepositors() public {
         vm.prank(alice);
-        uint256 sharesAlice = vault.deposit(100e6);
+        uint256 sharesAlice = vault.deposit(100e18);
 
         vm.prank(bob);
-        uint256 sharesBob = vault.deposit(100e6);
+        uint256 sharesBob = vault.deposit(100e18);
 
         assertGt(sharesAlice, 0);
         assertGt(sharesBob, 0);
-        assertEq(vault.totalAssets(), 200e6);
+        assertEq(vault.totalAssets(), 200e18);
     }
 
     function test_deposit_updatesInternalAccounting() public {
         vm.prank(alice);
-        vault.deposit(500e6);
+        vault.deposit(500e18);
 
-        assertEq(vault.internalTotalAssets(), 500e6);
-        assertEq(vault.totalAssets(), 500e6);
+        assertEq(vault.internalTotalAssets(), 500e18);
+        assertEq(vault.totalAssets(), 500e18);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -213,7 +217,7 @@ contract OszillorVaultTest is Test {
 
     function test_withdraw_basic() public {
         vm.prank(alice);
-        uint256 shares = vault.deposit(100e6);
+        uint256 shares = vault.deposit(100e18);
 
         uint256 balBefore = usdc.balanceOf(alice);
 
@@ -227,7 +231,7 @@ contract OszillorVaultTest is Test {
 
     function test_withdraw_emitsEvent() public {
         vm.prank(alice);
-        uint256 shares = vault.deposit(100e6);
+        uint256 shares = vault.deposit(100e18);
 
         vm.prank(alice);
         vm.expectEmit(true, false, false, false, address(vault));
@@ -243,7 +247,7 @@ contract OszillorVaultTest is Test {
 
     function test_withdraw_insufficientShares_reverts() public {
         vm.prank(alice);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
         uint256 aliceShares = token.sharesOf(alice);
 
         vm.prank(alice);
@@ -260,7 +264,7 @@ contract OszillorVaultTest is Test {
     function test_withdraw_allowedDuringEmergency() public {
         // HIGH-06: Withdrawals always allowed during emergency
         vm.prank(alice);
-        uint256 shares = vault.deposit(100e6);
+        uint256 shares = vault.deposit(100e18);
 
         // Activate emergency
         vm.prank(sentinel);
@@ -274,7 +278,7 @@ contract OszillorVaultTest is Test {
 
     function test_withdraw_updatesInternalAccounting() public {
         vm.prank(alice);
-        uint256 shares = vault.deposit(500e6);
+        uint256 shares = vault.deposit(500e18);
 
         vm.prank(alice);
         vault.withdraw(shares);
@@ -290,13 +294,13 @@ contract OszillorVaultTest is Test {
         uint256 initialBalance = usdc.balanceOf(alice);
 
         vm.prank(alice);
-        uint256 shares = vault.deposit(100e6);
+        uint256 shares = vault.deposit(100e18);
 
         vm.prank(alice);
         uint256 recovered = vault.withdraw(shares);
 
         // Should get back everything within 1 wei (rounding)
-        assertApproxEqAbs(recovered, 100e6, 1);
+        assertApproxEqAbs(recovered, 100e18, 1);
         assertApproxEqAbs(usdc.balanceOf(alice), initialBalance, 1);
     }
 
@@ -385,7 +389,7 @@ contract OszillorVaultTest is Test {
     function test_triggerRebase_success() public {
         // First deposit so token has shares
         vm.prank(alice);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
 
         vm.prank(rebaseExecutor);
         vault.triggerRebase(1.005e18);
@@ -396,7 +400,7 @@ contract OszillorVaultTest is Test {
 
     function test_triggerRebase_emitsEvent() public {
         vm.prank(alice);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
 
         vm.prank(rebaseExecutor);
         vm.expectEmit(false, false, false, false, address(vault));
@@ -478,7 +482,7 @@ contract OszillorVaultTest is Test {
 
         // Deposit should now work (auto-lifecycle check)
         vm.prank(alice);
-        uint256 shares = vault.deposit(100e6);
+        uint256 shares = vault.deposit(100e18);
         assertGt(shares, 0);
     }
 
@@ -524,7 +528,7 @@ contract OszillorVaultTest is Test {
     function test_fees_depositCollectsFees() public {
         // First deposit
         vm.prank(alice);
-        vault.deposit(1_000_000e6);
+        vault.deposit(1_000_000e18);
 
         // Warp 1 year
         vm.warp(block.timestamp + 365.25 days);
@@ -535,17 +539,17 @@ contract OszillorVaultTest is Test {
 
         // Second deposit should trigger fee collection
         vm.prank(bob);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
 
-        // Fees should have accrued (~0.5% of 1M = 5000 USDC)
+        // Fees should have accrued (~0.5% of 1M = 5000)
         assertGt(vault.accruedFees(), 0);
-        assertApproxEqAbs(vault.accruedFees(), 5000e6, 10e6); // within 10 USDC tolerance
+        assertApproxEqAbs(vault.accruedFees(), 5000e18, 10e18); // within 10 token tolerance
     }
 
     function test_fees_withdrawOnlyAccrued() public {
         // HIGH-07: withdrawFees only transfers accruedFees
         vm.prank(alice);
-        vault.deposit(1_000_000e6);
+        vault.deposit(1_000_000e18);
 
         vm.warp(block.timestamp + 365.25 days);
 
@@ -553,7 +557,7 @@ contract OszillorVaultTest is Test {
         vm.prank(riskEngine);
         vault.updateRiskScore(50, 80, bytes32(0));
         vm.prank(bob);
-        vault.deposit(1e6);
+        vault.deposit(1e15);
 
         uint256 accrued = vault.accruedFees();
         assertGt(accrued, 0);
@@ -602,28 +606,28 @@ contract OszillorVaultTest is Test {
     function test_totalAssets_usesInternalAccounting() public {
         // CRIT-06: Donation protection
         vm.prank(alice);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
 
         // Send USDC directly to vault (donation attack)
-        usdc.mint(address(vault), 1_000_000e6);
+        usdc.mint(address(vault), 1_000_000e18);
 
         // totalAssets should NOT include the donation
-        assertEq(vault.totalAssets(), 100e6);
+        assertEq(vault.totalAssets(), 100e18);
         // But raw balance has more
-        assertEq(usdc.balanceOf(address(vault)), 1_000_100e6);
+        assertEq(usdc.balanceOf(address(vault)), 1_000_100e18);
     }
 
     function test_donationAttack_sharePriceUnchanged() public {
         // CRIT-06: Direct USDC transfer doesn't affect share price
         vm.prank(alice);
-        uint256 shares1 = vault.deposit(100e6);
+        uint256 shares1 = vault.deposit(100e18);
 
         // Attacker donates to inflate share price
-        usdc.mint(address(vault), 100_000e6);
+        usdc.mint(address(vault), 100_000e18);
 
         // Bob deposits same amount — should get similar shares
         vm.prank(bob);
-        uint256 shares2 = vault.deposit(100e6);
+        uint256 shares2 = vault.deposit(100e18);
 
         // Shares should be approximately equal (donation has no effect)
         assertApproxEqAbs(shares1, shares2, 1);
@@ -668,10 +672,10 @@ contract OszillorVaultTest is Test {
 
     function test_maxWithdraw_returnsCorrectAmount() public {
         vm.prank(alice);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
 
         uint256 maxW = vault.maxWithdraw(alice);
-        assertApproxEqAbs(maxW, 100e6, 1);
+        assertApproxEqAbs(maxW, 100e18, 1);
     }
 
     function test_maxWithdraw_noShares() public view {
@@ -710,7 +714,7 @@ contract OszillorVaultTest is Test {
     function test_fullFlow_deposit_risk_rebase_withdraw() public {
         // 1. Alice deposits
         vm.prank(alice);
-        uint256 shares = vault.deposit(1000e6);
+        uint256 shares = vault.deposit(1000e18);
         assertGt(shares, 0);
 
         // 2. RiskEngine updates score (SAFE)
@@ -732,6 +736,6 @@ contract OszillorVaultTest is Test {
         //    (rebase affects token index, not vault's internal USDC accounting)
         vm.prank(alice);
         uint256 recovered = vault.withdraw(shares);
-        assertApproxEqAbs(recovered, 1000e6, 1); // recovered ~= original deposit
+        assertApproxEqAbs(recovered, 1000e18, 1); // recovered ~= original deposit
     }
 }

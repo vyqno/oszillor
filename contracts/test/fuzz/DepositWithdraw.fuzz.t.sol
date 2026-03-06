@@ -8,6 +8,7 @@ import {OszillorToken} from "../../src/core/OszillorToken.sol";
 import {Roles} from "../../src/libraries/Roles.sol";
 import {ShareMath} from "../../src/libraries/ShareMath.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
+import {MockStrategy} from "../mocks/MockStrategy.sol";
 
 /// @title DepositWithdrawFuzzTest
 /// @author Hitesh (vyqno)
@@ -30,6 +31,7 @@ contract DepositWithdrawFuzzTest is Test {
 
         vm.startPrank(admin);
 
+        MockStrategy strategy = new MockStrategy();
         token = new OszillorToken("OSZILLOR", "OSZ", admin);
         vault = new OszillorVault(
             address(usdc),
@@ -37,6 +39,7 @@ contract DepositWithdrawFuzzTest is Test {
             riskEngine,
             rebaseExecutor,
             sentinel,
+            address(strategy),
             admin,
             feeRecipient
         );
@@ -50,8 +53,8 @@ contract DepositWithdrawFuzzTest is Test {
 
     /// @notice Deposit X, withdraw all shares → recovered ≈ X (±1 wei rounding).
     function testFuzz_depositWithdrawRoundTrip(uint256 amount) public {
-        // Bound to valid deposit range: [1e6 (MIN_DEPOSIT), uint96 max]
-        amount = bound(amount, 1e6, type(uint96).max);
+        // Bound to valid deposit range: [1e15 (MIN_DEPOSIT), uint96 max]
+        amount = bound(amount, 1e15, type(uint96).max);
 
         address user = makeAddr("fuzzUser");
         usdc.mint(user, amount);
@@ -71,7 +74,7 @@ contract DepositWithdrawFuzzTest is Test {
 
     /// @notice Any deposit ≥ MIN_DEPOSIT always produces > 0 shares.
     function testFuzz_depositAlwaysProducesShares(uint256 amount) public {
-        amount = bound(amount, 1e6, type(uint96).max);
+        amount = bound(amount, 1e15, type(uint96).max);
 
         address user = makeAddr("fuzzUser2");
         usdc.mint(user, amount);
@@ -87,8 +90,8 @@ contract DepositWithdrawFuzzTest is Test {
 
     /// @notice Two depositors deposit different amounts; each withdraws their proportional share.
     function testFuzz_multipleDepositorsProportional(uint256 amountA, uint256 amountB) public {
-        amountA = bound(amountA, 1e6, 1e12); // up to 1M USDC
-        amountB = bound(amountB, 1e6, 1e12);
+        amountA = bound(amountA, 1e15, 1e24); // up to 1M WETH-scale
+        amountB = bound(amountB, 1e15, 1e24);
 
         address userA = makeAddr("userA");
         address userB = makeAddr("userB");

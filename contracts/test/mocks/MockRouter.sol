@@ -2,11 +2,12 @@
 pragma solidity 0.8.24;
 
 import {IRouter} from "@chainlink/contracts/src/v0.8/ccip/interfaces/IRouter.sol";
+import {IRouterClient} from "@chainlink/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts/src/v0.8/ccip/libraries/Client.sol";
 
 /// @title MockRouter
 /// @notice Mock CCIP Router for testing token pool on/offRamp validation.
-contract MockRouter is IRouter {
+contract MockRouter is IRouter, IRouterClient {
     mapping(uint64 => address) private _onRamps;
     mapping(uint64 => mapping(address => bool)) private _offRamps;
 
@@ -17,6 +18,23 @@ contract MockRouter is IRouter {
         address
     ) external pure returns (bool, bytes memory, uint256) {
         return (true, "", 0);
+    }
+
+    // IRouterClient implementation
+    function isChainSupported(uint64) external pure returns (bool) {
+        return true;
+    }
+    
+    function getSupportedTokens(uint64) external pure returns (address[] memory) {
+        return new address[](0);
+    }
+
+    function getFee(uint64, Client.EVM2AnyMessage memory) external pure returns (uint256) {
+        return 1e15; // mock fee
+    }
+
+    function ccipSend(uint64, Client.EVM2AnyMessage memory) external payable returns (bytes32) {
+        return keccak256("mock_message_id");
     }
 
     function getOnRamp(uint64 destChainSelector) external view returns (address) {

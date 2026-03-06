@@ -10,9 +10,10 @@ import {RebaseExecutor} from "../../src/modules/RebaseExecutor.sol";
 import {EventSentinel} from "../../src/modules/EventSentinel.sol";
 import {Roles} from "../../src/libraries/Roles.sol";
 import {RiskMath} from "../../src/libraries/RiskMath.sol";
-import {RiskReport, RebaseReport, ThreatReport, Allocation, RiskLevel} from "../../src/libraries/DataStructures.sol";
+import {RiskReport, RebalanceReport, ThreatReport, Allocation, RiskLevel} from "../../src/libraries/DataStructures.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockPausable} from "../mocks/MockPausable.sol";
+import {MockStrategy} from "../mocks/MockStrategy.sol";
 
 /// @title CREIntegrationTest
 /// @author Hitesh (vyqno)
@@ -39,6 +40,7 @@ contract CREIntegrationTest is Test {
     // ──────────────────── Contracts ────────────────────
     MockERC20 usdc;
     MockPausable pausable;
+    MockStrategy strategy;
     OszillorToken token;
     OszillorVault vault;
     RiskEngine riskEngine;
@@ -51,6 +53,7 @@ contract CREIntegrationTest is Test {
 
         usdc = new MockERC20();
         pausable = new MockPausable();
+        strategy = new MockStrategy();
         token = new OszillorToken("OSZILLOR", "OSZ", admin);
 
         // Predict vault address — modules need it at construction time
@@ -75,7 +78,7 @@ contract CREIntegrationTest is Test {
         vault = new OszillorVault(
             address(usdc), address(token),
             address(riskEngine), address(rebaseExecutor), address(eventSentinel),
-            admin, feeRecipient
+            address(strategy), admin, feeRecipient
         );
         assertEq(address(vault), predictedVault, "vault address prediction failed");
 
@@ -85,8 +88,8 @@ contract CREIntegrationTest is Test {
 
         vm.stopPrank();
 
-        // Fund user with 10,000 USDC and pre-approve vault
-        usdc.mint(user, 10_000e6);
+        // Fund user with 10,000 tokens and pre-approve vault
+        usdc.mint(user, 10_000e18);
         vm.prank(user);
         usdc.approve(address(vault), type(uint256).max);
     }
@@ -96,9 +99,9 @@ contract CREIntegrationTest is Test {
     // ═══════════════════════════════════════════════════════════════
 
     function test_e2e_depositAndPositiveRebase() public {
-        // Step 1: User deposits 1000 USDC
+        // Step 1: User deposits 1000 tokens
         vm.prank(user);
-        vault.deposit(1000e6);
+        vault.deposit(1000e18);
 
         uint256 balBefore = token.balanceOf(user);
         assertGt(balBefore, 0, "should have token balance after deposit");
@@ -121,9 +124,9 @@ contract CREIntegrationTest is Test {
     // ═══════════════════════════════════════════════════════════════
 
     function test_e2e_emergencyBlocksDepositsAndExpires() public {
-        // Step 1: User deposits 1000 USDC
+        // Step 1: User deposits 1000 tokens
         vm.prank(user);
-        vault.deposit(1000e6);
+        vault.deposit(1000e18);
 
         // Step 2: W2 — EventSentinel triggers emergency (2 hours)
         _sendThreatReport(true, 2 hours);
@@ -132,7 +135,7 @@ contract CREIntegrationTest is Test {
         // Step 3: Deposits are blocked during emergency
         vm.prank(user);
         vm.expectRevert();
-        vault.deposit(100e6);
+        vault.deposit(100e18);
 
         // Step 4: Withdrawals ALWAYS work — even during emergency (HIGH-06)
         uint256 shares = token.sharesOf(user);
@@ -146,7 +149,7 @@ contract CREIntegrationTest is Test {
 
         // Step 6: Deposits resume after expiry
         vm.prank(user);
-        vault.deposit(100e6);
+        vault.deposit(100e18);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -156,7 +159,7 @@ contract CREIntegrationTest is Test {
     function test_e2e_criticalRiskNegativeRebase() public {
         // Step 1: Deposit
         vm.prank(user);
-        vault.deposit(1000e6);
+        vault.deposit(1000e18);
         uint256 balAfterDeposit = token.balanceOf(user);
 
         // Step 2: Escalate risk 50 → 70 (DANGER tier, delta=20)
@@ -183,7 +186,7 @@ contract CREIntegrationTest is Test {
     function test_e2e_fullLifecycle() public {
         // ── Phase 1: Deposit ──
         vm.prank(user);
-        vault.deposit(5000e6);
+        vault.deposit(5000e18);
         uint256 initialBal = token.balanceOf(user);
         assertGt(initialBal, 0);
 
@@ -218,7 +221,7 @@ contract CREIntegrationTest is Test {
         assertFalse(vault.emergencyMode());
 
         vm.prank(user);
-        vault.deposit(1000e6);
+        vault.deposit(1000e18);
 
         // ── Phase 6: Full withdrawal ──
         uint256 finalShares = token.sharesOf(user);
@@ -234,7 +237,7 @@ contract CREIntegrationTest is Test {
 
     function test_e2e_crossWorkflowIndependence() public {
         vm.prank(user);
-        vault.deposit(1000e6);
+        vault.deposit(1000e18);
 
         // W1: risk update succeeds
         _sendRiskReport(35, 85);
@@ -264,7 +267,7 @@ contract CREIntegrationTest is Test {
 
     function test_e2e_compoundingRebases() public {
         vm.prank(user);
-        vault.deposit(1000e6);
+        vault.deposit(1000e18);
 
         // Set SAFE risk
         _sendRiskReport(35, 85);
@@ -318,9 +321,11 @@ contract CREIntegrationTest is Test {
         uint256 weightedApyBps,
         uint256 timeDelta
     ) internal pure returns (bytes memory) {
-        return abi.encode(RebaseReport({
+        // v2: RebaseExecutor now decodes RebalanceReport (adds targetEthPct)
+        return abi.encode(RebalanceReport({
             rebaseFactor: factor,
             currentRiskScore: riskScore,
+            targetEthPct: 10_000,
             weightedApyBps: weightedApyBps,
             timeDelta: timeDelta
         }));
