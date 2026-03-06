@@ -13,6 +13,8 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
     "@chainlink/contracts/=lib/chainlink/contracts/",
     "@chainlink-local/=lib/chainlink-local/",
+    "@uniswap/v3-periphery/=lib/v3-periphery/contracts/",
+    "@uniswap/v3-core/contracts/=lib/v3-core/contracts/",
 ]
 
 [invariant]
@@ -23,3 +25,11 @@ fail_on_revert = true
 [fuzz]
 runs = 10000
 max_test_rejects = 100000
+
+[rpc_endpoints]
+sepolia = "${SEPOLIA_RPC_URL}"
+base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+
+[etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://api-sepolia.etherscan.io/api" }
+base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
