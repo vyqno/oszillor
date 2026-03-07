@@ -1,350 +1,216 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/OSZILLOR-Protocol-6C5CE7?style=for-the-badge&labelColor=0D1117" alt="OSZILLOR" />
-</p>
+# OSZILLOR v2
 
-<h1 align="center">
-  <br>
-  ◈ OSZILLOR
-  <br>
-</h1>
+Risk-adjusted yield protocol with Chainlink CRE, AI reasoning, privacy-preserving data access, and CCIP-ready cross-chain routing.
 
-<p align="center">
-  <b>Risk-Reactive Rebase Token Protocol</b>
-  <br>
-  <i>Your wallet balance IS your risk dashboard.</i>
-</p>
+## One-line pitch
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Solidity-0.8.24-363636?style=flat-square&logo=solidity" alt="Solidity" />
-  <img src="https://img.shields.io/badge/Foundry-Framework-DEA584?style=flat-square" alt="Foundry" />
-  <img src="https://img.shields.io/badge/Chainlink-CRE%20%2B%20CCIP-375BD2?style=flat-square&logo=chainlink" alt="Chainlink" />
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" />
-  <img src="https://img.shields.io/badge/Tests-47%20Passing-brightgreen?style=flat-square" alt="Tests" />
-</p>
+The first DeFi protocol that thinks for itself: AI-powered cross-chain yield intelligence, private risk engine, and autonomous hedging.
 
-<p align="center">
-  <a href="#how-it-works">How It Works</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#getting-started">Getting Started</a> •
-  <a href="#testing">Testing</a> •
-  <a href="#security">Security</a> •
-  <a href="#roadmap">Roadmap</a>
-</p>
+## Current status (as of 2026-03-06)
 
----
+- Contracts compile successfully with Foundry (`make build`).
+- Hub deployment to Sepolia is complete.
+- Post-deploy operational roles were granted (`make roles`).
+- W1 workflow upgrades are implemented:
+  - Cross-chain yield scan from DefiLlama (`/pools`)
+  - LLM-based risk + yield reasoning
+  - ConfidentialHTTPClient for premium news signal
+- Frontend dashboard exists with wallet connect, deposit/withdraw, risk gauge, position, and yield intelligence views.
 
-## The Problem
+## Track framing
 
-DeFi users have **no autonomous protection** against risk. Existing protocols either:
-- Offer static yield with no risk awareness (Aave, Lido)
-- Provide read-only dashboards that require manual action (Forta, Hypernative)
-- Rebase based on price oracles, not real risk intelligence (Ampleforth, OHM)
+- DeFi and Tokenization: cross-chain yield intelligence + autonomous vault allocation.
+- Risk and Compliance: continuous risk scoring + circuit-breaker style emergency controls.
+- CRE and AI: multi-source workflow compute + LLM reasoning.
+- Privacy: ConfidentialHTTPClient for protected risk input pipeline.
 
-**When a protocol gets exploited, users find out on Twitter — after their funds are gone.**
+## Why OSZILLOR is a superset of YieldCoin
 
-## The Solution
+| Dimension | YieldCoin pattern | OSZILLOR v2 |
+| --- | --- | --- |
+| Yield optimization | Cross-chain yield hunt | Cross-chain yield hunt + risk-adjusted allocation |
+| AI | Recommendation layer | Recommendation layer + onchain report hash + deterministic fallback |
+| Risk defense | Limited | 3-workflow defense-in-depth (W1/W2/W3) |
+| Privacy | Not core | ConfidentialHTTPClient for proprietary risk/news inputs |
+| Execution | Strategy-level | Strategy-level + autonomous hedge + rebase token mechanics |
+| Capital efficiency | Atomic fund routing | Atomic fund routing with dynamic ETH/USDC hedging |
+| Cross-chain rail | CCIP-style narrative | CCIP-ready hub/spoke contracts deployed in hub path |
 
-OSZILLOR is the first protocol where **confidential AI risk assessment drives autonomous token rebasing** across multiple chains.
+## Upgrade plan progress (F-00 to F-07)
 
-```
-  ┌─────────────────────────────────────────────┐
-  │          SAFE (score 0-39)                  │
-  │  ██████████████████████████  +yield         │
-  │          your OSZ balance grows             │
-  ├─────────────────────────────────────────────┤
-  │          CAUTION (score 40-69)              │
-  │  █████████████               +half yield    │
-  │          your OSZ balance grows slowly      │
-  ├─────────────────────────────────────────────┤
-  │          DANGER (score 70-89)               │
-  │  ░░░░░░░░░░░░░░░░░░░░░░░░░  zero yield    │
-  │          your OSZ balance holds steady      │
-  ├─────────────────────────────────────────────┤
-  │          CRITICAL (score 90-100)            │
-  │  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  -0.5%         │
-  │          protocol de-risks autonomously     │
-  └─────────────────────────────────────────────┘
-```
-
-## How It Works
-
-```
-User deposits USDC ──► Receives OSZ rebase tokens
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-    ┌──────────┐       ┌──────────┐       ┌──────────┐
-    │  CRE W1  │       │  CRE W2  │       │  CRE W3  │
-    │   Risk   │       │  Event   │       │  Rebase  │
-    │ Scanner  │       │ Sentinel │       │ Executor │
-    │  (60s)   │       │ (events) │       │ (5 min)  │
-    └────┬─────┘       └────┬─────┘       └────┬─────┘
-         │                  │                   │
-         ▼                  ▼                   ▼
-    AI risk score      Emergency halt      Apply rebase
-    via TEE/DON        on threats           factor to
-    consensus          (depegs, hacks)      rebaseIndex
-         │                  │                   │
-         └──────────────────┼───────────────────┘
-                            ▼
-                   OSZ balance adjusts
-                   automatically ◈
-```
-
-**Three Chainlink CRE workflows** run autonomously:
-
-| Workflow | Trigger | What It Does | CRE Capabilities |
-|----------|---------|-------------|-------------------|
-| **W1** Risk Scanner | Cron / 60s | AI scores DeFi risk (0-100) inside TEE | Confidential HTTP, Compute (Gemini), DON Consensus |
-| **W2** Event Sentinel | EVM Logs | Detects depegs, exploits, TVL crashes | EVM Log Trigger, HTTP, EVM Read |
-| **W3** Rebase Executor | Cron / 5min | Applies risk-adjusted yield as rebase | EVM Read, Compute, EVM Write |
-
-> **11 CRE capabilities** across 3 workflows. The AI risk model runs inside a **Trusted Execution Environment** — not even CRE node operators can see the strategy.
+- [x] `F-00` Cross-chain yield intelligence in W1
+- [x] `F-01` AI risk reasoning in W1
+- [x] `F-02` ConfidentialHTTPClient in W1
+- [x] `F-03` Sepolia hub deployment and role setup
+- [x] `F-04` Frontend dashboard MVP (implemented)
+- [ ] `F-04.1` Frontend polish and live-data UX
+- [ ] `F-05` CRE simulation runbook execution against latest deployment
+- [ ] `F-06` Demo video (3-4 minutes)
+- [x] `F-07` README and submission structure refresh
 
 ## Architecture
 
-```
-contracts/src/
-  libraries/          Layer 1 — Pure logic, no state
-    ├── Roles.sol              9 granular RBAC roles
-    ├── DataStructures.sol     Shared enums & structs
-    ├── OszillorErrors.sol     22 custom errors (zero string reverts)
-    ├── ShareMath.sol          Share ↔ amount conversion (inflation-proof)
-    ├── RiskMath.sol            Risk tiers, factor bounds, rebase calc
-    └── CCIPOperations.sol     CCIP message building & fee handling
+### Contracts (hub path)
 
-  interfaces/         Layer 2 — Contract communication boundaries
-  modules/            Layer 3 — Reusable behaviors (pause, CRE, fees)
-  core/               Layer 4 — OszillorToken + OszillorVault
-  peers/              Layer 5 — Hub + Spoke CCIP orchestration
-  adapters/           Layer 6 — Risk data source plugins
-```
+1. `MockLido` (Sepolia substitute for stETH)
+2. `OszillorToken`
+3. `RiskEngine` (W1 receiver)
+4. `RebaseExecutor` (W3 receiver)
+5. `EventSentinel` (W2 receiver)
+6. `VaultStrategy`
+7. `OszillorVault`
+8. `OszillorTokenPool`
+9. `HubPeer`
 
-### Hub-Spoke Topology
+### V2 Fund Flow (Atomic Routing)
 
-```
-                    ┌─────────────────┐
-                    │   HUB (Base)    │
-                    │                 │
-                    │  OszillorToken  │
-                    │  OszillorVault  │
-                    │  RiskEngine     │
-                    │  RebaseExecutor │
-                    │  EventSentinel  │
-                    └────────┬────────┘
-                             │ CCIP
-                    ┌────────┴────────┐
-                    │                 │
-              ┌─────┴─────┐   ┌──────┴─────┐
-              │  SPOKE 1  │   │  SPOKE 2   │
-              │ Arbitrum  │   │  Optimism  │
-              │           │   │            │
-              │ SpokePeer │   │ SpokePeer  │
-              │ SpokeToken│   │ SpokeToken │
-              └───────────┘   └────────────┘
-```
+Unlike earlier versions where capital might sit idle in the vault awaiting a rebalance, v2 implements "Atomic Fund Routing" directly on user actions:
+- **Deposit**: When a user deposits WETH into `OszillorVault`, the vault instantly transfers the assets to `VaultStrategy` and stakes them (e.g., into Lido). Yield generation begins in the same block.
+- **Withdraw**: When a user withdraws, the Vault calls an internal `_ensureLiquidity()` method that pulls funds back via `strategy.withdrawToVault()`, automatically unstaking from Lido if the strategy lacks idle WETH.
 
-### Security Model
+### CRE workflows
 
-```
-DEFAULT_ADMIN_ROLE (multisig, 5-day transfer delay)
-  ├── CONFIG_ADMIN_ROLE          → risk adapters, registry
-  ├── CROSS_CHAIN_ADMIN_ROLE     → CCIP spoke registration
-  ├── RISK_MANAGER_ROLE          → RiskEngine + Vault (mint/burn)
-  ├── REBASE_EXECUTOR_ROLE       → RebaseExecutor only
-  ├── SENTINEL_ROLE              → EventSentinel only
-  ├── EMERGENCY_PAUSER_ROLE      → dedicated hot wallet
-  ├── EMERGENCY_UNPAUSER_ROLE    → DIFFERENT address (anti-hostage)
-  ├── FEE_RATE_SETTER_ROLE       → governance multisig
-  └── FEE_WITHDRAWER_ROLE        → treasury multisig
-```
+- `W1 Risk Scanner` (`*/30s`): multi-signal risk scoring + cross-chain yield scan + AI reasoning.
+- `W2 Event Sentinel` (`*/15s`): fast anomaly/threat checks and emergency signal path.
+- `W3 Rebase Executor` (`*/300s`): computes and applies rebase/position updates.
 
-> **9 granular roles.** No god keys. Each CRE workflow has its own receiver contract — compromise of one cannot affect the others (bulkhead pattern).
+### CRE capability coverage
 
-## Getting Started
+- Cron Trigger
+- HTTPClient (CoinGecko)
+- HTTPClient (DefiLlama chains)
+- HTTPClient (DefiLlama yields)
+- ConfidentialHTTPClient (premium news)
+- HTTPClient to LLM API
+- Compute
+- DON consensus
+- EVM read
+- EVM write
+
+## Sepolia deployment (hub)
+
+Deployment completed with `DeployHub.s.sol` and `SetupRoles.s.sol`.
+
+| Contract | Address |
+| --- | --- |
+| OszillorToken | `0xe14590980844A4A58aCAf7e8B22cBb36357772eF` |
+| MockLido | `0x44a64cf4282AaFb70E87E11F04aaD711242e42D1` |
+| VaultStrategy | `0xf994E4aD3C62F05BCa67cDE4010066fA96200212` |
+| RiskEngine | `0x39EcdbD6550E1EC7f99c2a7D0927E1E5B88b91CE` |
+| RebaseExecutor | `0x16e4A4Af28ECA70fF2fD8401610E770976F17368` |
+| EventSentinel | `0x236fd9ebEF2F7fFba47034F5a3907B32CdF696F3` |
+| OszillorVault | `0xe275f81598634329E2e32d24b6ba1B51E3e368F1` |
+| OszillorTokenPool | `0x19465b9456492760859Cb16501723Fd870d13E16` |
+| HubPeer | `0x698E21b82ACF93189731AF81f906991fCEBB02Bd` |
+
+## Important operational follow-up (not optional)
+
+After `make roles`, complete admin hardening:
+
+1. `vault.beginDefaultAdminTransfer(multisig)`
+2. `token.beginDefaultAdminTransfer(multisig)`
+3. Wait 5 days (AccessControlDefaultAdminRules delay)
+4. Multisig calls `acceptDefaultAdminTransfer()` on both
+5. Deployer renounces privileged roles
+
+## What is still left to finish
+
+1. Run `make validate` on current Sepolia deployment and archive output.
+2. Run all 3 CRE simulations against current staging configs and capture logs.
+3. Run live deposit/withdraw smoke flow from frontend against Sepolia.
+4. Complete frontend polish for demo recording:
+   - Replace placeholder AI text where possible (or clearly label as deterministic demo output)
+   - Ensure event timeline reflects live contract/workflow events
+5. Record final 3-4 minute demo video.
+6. Finalize submission package (README, architecture diagram, video, track mapping).
+
+## Local development
 
 ### Prerequisites
 
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) (forge, cast, anvil)
-- Git
+- Foundry (`forge`, `cast`)
+- Bun (for CRE workflow tests)
+- Node.js 18+
 
-### Installation
-
-```bash
-git clone https://github.com/vyqno/oszillor.git
-cd oszillor/contracts
-
-# Install dependencies
-forge install OpenZeppelin/openzeppelin-contracts --no-commit
-git clone --depth 1 https://github.com/smartcontractkit/ccip.git lib/chainlink
-git clone --depth 1 https://github.com/smartcontractkit/chainlink-local.git lib/chainlink-local
-
-# Verify
-forge build
-```
-
-> **Note:** Chainlink Solidity contracts are sourced from the archived `smartcontractkit/ccip` repo — the main `smartcontractkit/chainlink` repo no longer contains Solidity contracts at root.
-
-### Build
+### Build and test
 
 ```bash
-cd contracts
-forge build
+make build
+make test
+cd cre-workflows/tests && bun test
 ```
 
-### Test
+### Deploy hub
 
 ```bash
-# All tests
-forge test
-
-# Verbose output
-forge test -vvv
-
-# Only fuzz tests
-forge test --match-path test/fuzz/*
-
-# Only unit tests
-forge test --match-path test/unit/*
+make deploy-hub
+make roles
+make validate
 ```
 
-## Testing
+### Simulate workflows
 
-### Test Pyramid
-
-```
-  ┌───────────────┐
-  │    Certora     │  Formal verification — 7 invariants
-  ├───────────────┤
-  │   Invariant    │  Stateful fuzz via Handler pattern
-  ├───────────────┤
-  │     Fuzz       │  Stateless fuzz (ShareMath, RiskMath)
-  ├───────────────┤
-  │     Unit       │  Every public/external function
-  ├───────────────┤
-  │    Slither     │  Static analysis on every commit
-  └───────────────┘
+```bash
+cd cre-workflows
+cre workflow simulate ./oszillor-risk-scanner --target staging-settings
+cre workflow simulate ./oszillor-event-sentinel --target staging-settings
+cre workflow simulate ./oszillor-rebase-executor --target staging-settings
 ```
 
-### Current Coverage
+## Frontend
 
-| Suite | Tests | Status |
-|-------|-------|--------|
-| Unit (Libraries) | 32 | Passing |
-| Fuzz (ShareMath) | 5 × 10K runs | Passing |
-| Fuzz (RiskMath) | 10 × 10K runs | Passing |
-| **Total** | **47** | **All green** |
+Path: `frontend/`
 
-### Critical Invariants (to be formally verified)
+Tech stack:
+- Next.js 14
+- Tailwind
+- wagmi + viem
+- RainbowKit
+- recharts + framer-motion
 
-1. `sum(sharesOf(all_users)) == token.totalShares()`
-2. `deposit(X) then withdraw → returns X ± 1 wei`
-3. `rebase(factor)` only if factor ∈ `[0.99e18, 1.01e18]`
-4. `emergencyMode == true → deposit() always reverts`
-5. `rebase()` callable ONLY by `REBASE_EXECUTOR_ROLE`
-6. `deposit(amount >= MIN_DEPOSIT) → shares > 0`
-7. `rebaseIndex` always ∈ `[1e16, 1e20]`
+Run:
 
-## Security
-
-### Audit Status
-
-- **36 findings** identified during design-phase security analysis
-- **6 Critical, 11 High, 10 Medium, 5 Low, 4 Info**
-- All findings have remediation code patterns embedded in the implementation
-- External audit planned before mainnet deployment
-
-### Key Security Features
-
-| Feature | Protection Against |
-|---------|-------------------|
-| Virtual share offset | First-depositor inflation attack (CRIT-01) |
-| Factor + index bounds | Rebase index overflow to zero (CRIT-02) |
-| Fail-closed init (CAUTION) | Exploitation before first CRE report (CRIT-03) |
-| Spoke staleness threshold | Stale risk state exploitation on L2s (CRIT-04) |
-| Confidential Compute (TEE) | Rebase sandwich MEV attacks (CRIT-05) |
-| Internal asset accounting | Donation attack via direct transfer (CRIT-06) |
-| Share-based allowances | Stale ERC20 allowances after rebase (HIGH-01) |
-| Delta clamping (max 20) | Oracle manipulation via rapid updates (HIGH-05) |
-| Immutable CRE params | Workflow redirect attacks (MED-03) |
-| CCIP ordered execution | Out-of-order state corruption (HIGH-09) |
-
-### Immutable Contracts
-
-OSZILLOR uses **no proxies, no upgradeability**. All contracts are immutable once deployed. If a critical vulnerability is discovered post-deployment, the emergency system returns assets to users and a new deployment is created.
-
-## How OSZILLOR Differs
-
-| Protocol | What It Does | OSZILLOR Advantage |
-|----------|-------------|-------------------|
-| Ampleforth / OHM | Price-oracle rebases | Multi-dimensional AI risk model |
-| aTokens (Aave) | Fixed interest accrual | Risk-adjusted yield, halts when danger detected |
-| stETH (Lido) | Staking rewards rebase | Autonomous de-risking before losses |
-| Hypernative / Forta | Read-only risk dashboards | Autonomously **acts** on risk |
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Smart Contracts | Solidity 0.8.24, Foundry |
-| Risk Intelligence | Chainlink CRE (Confidential Compute + DON Consensus) |
-| Cross-Chain | Chainlink CCIP (Hub-Spoke topology) |
-| Access Control | OpenZeppelin AccessControlDefaultAdminRules |
-| Token Standard | ERC-20 + ERC-677 + CCIP CCT |
-| Frontend | Next.js + thirdweb v5 (Account Abstraction, gasless) |
-| Testing | Forge (unit + fuzz + invariant), Slither, Certora |
-
-## Roadmap
-
-- [x] Architecture design + security audit (36 findings)
-- [x] Phase 01 — Project setup + dependencies
-- [x] Phase 02 — Layer 1 libraries (6 contracts, 47 tests)
-- [ ] Phase 03 — Interfaces
-- [ ] Phase 04 — Modules (PausableAC, CREReceiver, Fees, RiskEngine, RebaseExecutor, EventSentinel)
-- [ ] Phase 05 — Core Token (share accounting, ERC-677, rebase)
-- [ ] Phase 06 — Core Vault (ERC-4626, donation protection, risk-aware previews)
-- [ ] Phase 07 — CCIP TokenPool (share-based bridging)
-- [ ] Phase 08 — Hub + Spoke peers
-- [ ] Phase 09 — CRE workflow YAML + simulation
-- [ ] Phase 10 — Invariant tests + Slither
-- [ ] Phase 11 — Certora formal verification
-- [ ] Phase 12 — Frontend (Next.js + thirdweb)
-- [ ] Phase 13 — Deployment + external audit
-
-## Project Structure
-
-```
-oszillor/
-├── contracts/
-│   ├── src/
-│   │   ├── libraries/      ← Pure logic (Layer 1)
-│   │   ├── interfaces/     ← Contract boundaries (Layer 2)
-│   │   ├── modules/        ← Reusable behaviors (Layer 3)
-│   │   ├── core/           ← Token + Vault (Layer 4)
-│   │   ├── peers/          ← CCIP orchestration (Layer 5)
-│   │   └── adapters/       ← Risk plugins (Layer 6)
-│   ├── test/
-│   │   ├── unit/
-│   │   ├── fuzz/
-│   │   ├── invariant/
-│   │   └── mocks/
-│   ├── script/
-│   ├── certora/
-│   ├── foundry.toml
-│   └── remappings.txt
-├── cre-workflows/           ← CRE workflow YAML definitions
-├── frontend/                ← Next.js + thirdweb dashboard
-└── README.md
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-## License
+Expected env vars (`frontend/.env.local`):
 
-MIT
+```bash
+NEXT_PUBLIC_VAULT_ADDRESS=0xe275f81598634329E2e32d24b6ba1B51E3e368F1
+NEXT_PUBLIC_TOKEN_ADDRESS=0xe14590980844A4A58aCAf7e8B22cBb36357772eF
+NEXT_PUBLIC_STRATEGY_ADDRESS=0xf994E4aD3C62F05BCa67cDE4010066fA96200212
+NEXT_PUBLIC_WETH_ADDRESS=0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=YOUR_PROJECT_ID
+```
 
----
+## Repository map
 
-<p align="center">
-  <b>◈ OSZILLOR</b> — Built by <a href="https://github.com/vyqno">vyqno</a>
-  <br>
-  <i>The first protocol that de-risks before you get rekt.</i>
-</p>
+```text
+contracts/
+  src/
+  script/deploy/
+  script/interactions/
+  test/
+
+cre-workflows/
+  oszillor-risk-scanner/
+  oszillor-event-sentinel/
+  oszillor-rebase-executor/
+  tests/
+
+frontend/
+  app/
+  components/
+  hooks/
+  lib/
+```
+
+## Plan reference
+
+Primary implementation plan source:
+- `.references/2026-03-06-implement-the-following-plan.txt`
+
+This README reflects that plan plus the completed Sepolia hub deployment and post-deploy role setup.
