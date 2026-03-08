@@ -92,6 +92,7 @@ contract DeployHub is Script {
         // Step 7: Grant roles on Token to Vault
         token.grantRole(Roles.RISK_MANAGER_ROLE, address(vault));
         token.grantRole(Roles.REBASE_EXECUTOR_ROLE, address(vault));
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, address(vault));
 
         // Step 8: Grant STRATEGY_MANAGER_ROLE on Strategy to Vault
         strategy.grantRole(Roles.STRATEGY_MANAGER_ROLE, address(vault));

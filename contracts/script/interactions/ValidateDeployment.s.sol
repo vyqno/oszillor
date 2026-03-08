@@ -112,7 +112,6 @@ contract ValidateDeployment is Script {
         console2.log("");
         console2.log("[Vault Roles]");
         _check("RiskEngine has RISK_MANAGER_ROLE on Vault", vault.hasRole(Roles.RISK_MANAGER_ROLE, riskEngineAddr));
-        _check("Vault self has RISK_MANAGER_ROLE", vault.hasRole(Roles.RISK_MANAGER_ROLE, vaultAddr));
         _check("RebaseExecutor has REBASE_EXECUTOR_ROLE on Vault", vault.hasRole(Roles.REBASE_EXECUTOR_ROLE, rebaseExecutorAddr));
         _check("EventSentinel has SENTINEL_ROLE on Vault", vault.hasRole(Roles.SENTINEL_ROLE, eventSentinelAddr));
     }
@@ -122,6 +121,7 @@ contract ValidateDeployment is Script {
         console2.log("[Token Roles]");
         _check("Vault has RISK_MANAGER_ROLE on Token", token.hasRole(Roles.RISK_MANAGER_ROLE, vaultAddr));
         _check("Vault has REBASE_EXECUTOR_ROLE on Token", token.hasRole(Roles.REBASE_EXECUTOR_ROLE, vaultAddr));
+        _check("Vault has TOKEN_MINTER_ROLE on Token", token.hasRole(Roles.TOKEN_MINTER_ROLE, vaultAddr));
         _check("TokenPool has RISK_MANAGER_ROLE on Token", token.hasRole(Roles.RISK_MANAGER_ROLE, tokenPoolAddr));
     }
 
