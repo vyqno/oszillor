@@ -101,3 +101,9 @@ __pycache__/
 .venv/
 venv/
 cre-docs/
+
+# --- Scratch & Commit Logs ---
+COMMIT_MSG.txt
+check-balance.ts
+risk-api/check-balance.ts
+temp_commit_msg.txt
