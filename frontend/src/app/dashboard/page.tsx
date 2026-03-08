@@ -1,40 +1,170 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useEffect } from "react";
-import { ConnectButton, useActiveAccount, useReadContract, TransactionButton } from "thirdweb/react";
-import { prepareContractCall, toWei, toEther } from "thirdweb";
+import {
+  useActiveAccount,
+  useReadContract,
+  useWalletBalance,
+  useActiveWalletChain,
+  useSwitchActiveWalletChain,
+  ConnectButton,
+  TransactionButton,
+  PayEmbed,
+  useContractEvents,
+} from "thirdweb/react";
+import { prepareContractCall, toWei, toEther, prepareEvent } from "thirdweb";
+import { sepolia } from "thirdweb/chains";
 import { client } from "@/client";
-import { vaultContract, wethContract, vaultAbi, erc20Abi, VAULT_ADDRESS, STRATEGY_ADDRESS } from "@/lib/contracts";
+import {
+  vaultContract, wethContract, strategyContract,
+  VAULT_ABI, ERC20_ABI, STRATEGY_ABI,
+  VAULT_ADDRESS, WETH_ADDRESS, STRATEGY_ADDRESS,
+} from "@/lib/contracts";
+import { wallets } from "@/lib/wallets";
+import { oszillorTheme } from "@/lib/theme";
+import { parseContractError } from "@/lib/errors";
+import { useEthPrice, formatUsd } from "@/hooks/useEthPrice";
+import { Header } from "@/components/Header";
+import { AddressDisplay } from "@/components/AddressDisplay";
+import { AnimateOnScroll } from "@/components/AnimateOnScroll";
 import confetti from "canvas-confetti";
 
-function Logo() {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="grid size-9 place-items-center rounded-2xl bg-[#2563eb]/10 ring-1 ring-[#2563eb]/20">
-        <svg viewBox="0 0 24 24" className="size-4 text-[#2563eb]" fill="none">
-          <path d="M4 12L12 4l3 3-5 5 5 5-3 3-8-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M14 4l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      <div className="text-xl font-bold tracking-tight text-[#0a0f1e]">oszillor</div>
-    </div>
-  );
-}
+const RISK_LABELS = ["SAFE", "CAUTION", "DANGER", "CRITICAL"] as const;
+const RISK_COLORS: Record<string, string> = {
+  SAFE: "#00FFB2",
+  CAUTION: "#FFB020",
+  DANGER: "#FF6B35",
+  CRITICAL: "#FF3B5C",
+};
 
 export default function DashboardPage() {
   const account = useActiveAccount();
+  const chain = useActiveWalletChain();
+  const switchChain = useSwitchActiveWalletChain();
+  const wrongChain = account && chain && chain.id !== sepolia.id;
+
+  const { ethPrice } = useEthPrice();
   const [activeTab, setActiveTab] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
   const [isPanicking, setIsPanicking] = useState(false);
-  const [mockLogs, setMockLogs] = useState<string[]>([]);
+  const [showPayEmbed, setShowPayEmbed] = useState(false);
+  const [txError, setTxError] = useState<string | null>(null);
   const [tickingYield, setTickingYield] = useState(0);
-  
+  const [mockLogs, setMockLogs] = useState<string[]>([]);
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  // ── Native ETH balance via thirdweb useWalletBalance ──
+  const { data: nativeBalance } = useWalletBalance({
+    client,
+    chain: sepolia,
+    address: account?.address,
+  });
+
+  // ── WETH balance via thirdweb useWalletBalance (token mode) ──
+  const { data: wethTokenBalance } = useWalletBalance({
+    client,
+    chain: sepolia,
+    address: account?.address,
+    tokenAddress: WETH_ADDRESS,
+  });
+
+  // ── Vault contract reads ──
+  const { data: totalAssets } = useReadContract({
+    contract: vaultContract,
+    method: VAULT_ABI.totalAssets,
+    params: [],
+  });
+  const { data: isPaused } = useReadContract({
+    contract: vaultContract,
+    method: VAULT_ABI.paused,
+    params: [],
+  });
+  const { data: emergencyModeActive } = useReadContract({
+    contract: vaultContract,
+    method: VAULT_ABI.emergencyMode,
+    params: [],
+  });
+  const { data: riskScore } = useReadContract({
+    contract: vaultContract,
+    method: VAULT_ABI.currentRiskScore,
+    params: [],
+  });
+  const { data: riskLevel } = useReadContract({
+    contract: vaultContract,
+    method: VAULT_ABI.riskLevel,
+    params: [],
+  });
+  const { data: allowance } = useReadContract({
+    contract: wethContract,
+    method: ERC20_ABI.allowance,
+    params: [account?.address || "0x0000000000000000000000000000000000000000", VAULT_ADDRESS],
+  });
+  const { data: wethBalance } = useReadContract({
+    contract: wethContract,
+    method: ERC20_ABI.balanceOf,
+    params: [account?.address || "0x0000000000000000000000000000000000000000"],
+  });
+  const { data: vaultShares } = useReadContract({
+    contract: vaultContract,
+    method: ERC20_ABI.balanceOf,
+    params: [account?.address || "0x0000000000000000000000000000000000000000"],
+  });
+  const { data: vaultWethBalance } = useReadContract({
+    contract: wethContract,
+    method: ERC20_ABI.balanceOf,
+    params: [VAULT_ADDRESS],
+  });
+
+  // ── Strategy reads ──
+  const { data: strategyTotalValue } = useReadContract({
+    contract: strategyContract,
+    method: STRATEGY_ABI.totalValueInEth,
+    params: [],
+  });
+  const { data: currentEthPct } = useReadContract({
+    contract: strategyContract,
+    method: STRATEGY_ABI.currentEthPct,
+    params: [],
+  });
+
+  // ── Live events via useContractEvents ──
+  const depositEvent = prepareEvent({
+    signature: "event Deposit(address indexed depositor, uint256 assets, uint256 shares)",
+  });
+  const withdrawEvent = prepareEvent({
+    signature: "event Withdraw(address indexed withdrawer, uint256 assets, uint256 shares)",
+  });
+  const { data: recentDeposits } = useContractEvents({
+    contract: vaultContract,
+    events: [depositEvent, withdrawEvent],
+    blockRange: 50000,
+  });
+
+  // ── Derived values ──
+  const amountWei = amount && !isNaN(Number(amount)) ? toWei(amount) : BigInt(0);
+  const needsApproval = allowance !== undefined && allowance < amountWei && activeTab === "deposit";
+  const tvl = totalAssets ? Number(toEther(totalAssets)).toFixed(4) : "0.0000";
+  const formattedWethBalance = wethBalance ? Number(toEther(wethBalance)).toFixed(4) : "0.0000";
+  const formattedVaultShares = vaultShares ? Number(toEther(vaultShares)).toFixed(4) : "0.0000";
+  const vaultSharesNum = vaultShares ? Number(toEther(vaultShares)) : 0;
+  const riskLabel = riskLevel !== undefined ? RISK_LABELS[Number(riskLevel)] || "UNKNOWN" : "SYNCING";
+  const riskColor = RISK_COLORS[riskLabel] || "#8B8B93";
+  const effectiveIsPaused = isPaused || emergencyModeActive || isPanicking;
+  const ethPctDisplay = currentEthPct ? (Number(currentEthPct) / 100).toFixed(1) : "100.0";
+
+  // ── Live yield ticker ──
   useEffect(() => {
-    if (!isPanicking) {
-      setMockLogs([]);
-      return;
-    }
+    if (vaultSharesNum === 0) { setTickingYield(0); return; }
+    const yieldPerSec = vaultSharesNum * 0.0642 / 31536000;
+    const interval = setInterval(() => {
+      setTickingYield(prev => prev + yieldPerSec / 10);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [vaultSharesNum]);
+
+  // ── Panic simulation logs ──
+  useEffect(() => {
+    if (!isPanicking) { setMockLogs([]); return; }
     const logs = [
       "> [Oszillor AI] Ingesting real-time HTTP streams...",
       "> [Oszillor AI] Scanning DefiLlama reserve ratios...",
@@ -44,392 +174,462 @@ export default function DashboardPage() {
       "> [Oszillor AI] Risk Vector :: Lido ETH Depeg",
       "> ------------------------------------------------",
       "> [Oszillor AI] DIRECTIVE: EMIT_PAUSE_AND_WITHDRAW",
-      "> [SYSTEM] Vault Paused. Funds routing to safety."
+      "> [SYSTEM] Vault Paused. Funds routing to safety.",
     ];
     let i = 0;
     setMockLogs(["> [SYSTEM] Initializing Risk Scanner..."]);
     const interval = setInterval(() => {
-      if (i < logs.length) {
-        setMockLogs(prev => [...prev, logs[i]]);
-        i++;
-      } else {
-        clearInterval(interval);
-      }
+      if (i < logs.length) { setMockLogs(prev => [...prev, logs[i]]); i++; }
+      else clearInterval(interval);
     }, 1200);
     return () => clearInterval(interval);
   }, [isPanicking]);
 
-  const { data: totalAssets } = useReadContract({
-    contract: vaultContract,
-    method: vaultAbi[1],
-    params: [],
-  });
-  const { data: isPaused } = useReadContract({
-    contract: vaultContract,
-    method: vaultAbi[2],
-    params: [],
-  });
-  const { data: allowance } = useReadContract({
-    contract: wethContract,
-    method: erc20Abi[1],
-    params: [account?.address || "0x0000000000000000000000000000000000000000", VAULT_ADDRESS],
-  });
-  const { data: wethBalance } = useReadContract({
-    contract: wethContract,
-    method: erc20Abi[2],
-    params: [account?.address || "0x0000000000000000000000000000000000000000"],
-  });
-  const { data: vaultShares } = useReadContract({
-    contract: vaultContract,
-    method: erc20Abi[2],
-    params: [account?.address || "0x0000000000000000000000000000000000000000"],
-  });
-  const { data: vaultWethBalance } = useReadContract({
-    contract: wethContract,
-    method: erc20Abi[2],
-    params: [VAULT_ADDRESS],
-  });
-  const { data: strategyWethBalance } = useReadContract({
-    contract: wethContract,
-    method: erc20Abi[2],
-    params: [STRATEGY_ADDRESS],
-  });
+  // Clear errors on input change
+  useEffect(() => { setTxError(null); }, [amount, activeTab]);
 
-  const amountWei = amount && !isNaN(Number(amount)) ? toWei(amount) : BigInt(0);
-  const needsApproval = allowance !== undefined && allowance < amountWei && activeTab === "deposit";
-  const tvl = totalAssets ? Number(toEther(totalAssets)).toFixed(4) : "0.0000";
-  const formattedWethBalance = wethBalance ? Number(toEther(wethBalance)).toFixed(4) : "0.0000";
-  const formattedVaultShares = vaultShares ? Number(toEther(vaultShares)).toFixed(4) : "0.0000";
-  const vaultSharesNum = vaultShares ? Number(toEther(vaultShares)) : 0;
-  
-  useEffect(() => {
-    if (vaultSharesNum === 0) return;
-    const yieldPerSec = vaultSharesNum * 0.0642 / 31536000;
-    const interval = setInterval(() => {
-      setTickingYield(prev => prev + yieldPerSec / 10);
-    }, 100);
-    return () => clearInterval(interval);
-  }, [vaultSharesNum]);
-
-  const effectiveIsPaused = isPaused || isPanicking;
+  const sortedEvents = recentDeposits
+    ? [...recentDeposits].sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber)).slice(0, 5)
+    : [];
 
   return (
-    <main className="min-h-screen bg-[#f5f7ff] text-[#0a0f1e] pb-16 pt-6 sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-6xl px-4">
-        
-        {/* Header */}
-        <header className="flex items-center justify-between mb-12">
-          <Logo />
-          <div className="flex items-center gap-6">
-            <nav className="hidden md:flex items-center gap-4 mr-4">
-               <Link href="/dashboard" className="text-sm font-bold text-[#2563eb] border-b-2 border-[#2563eb] pb-1">Dashboard</Link>
-               <Link href="/portfolio" className="text-sm font-semibold text-[#6b7280] hover:text-[#0a0f1e] transition">Portfolio</Link>
-            </nav>
-            <button 
-              onClick={() => setIsPanicking(!isPanicking)}
-              className="hidden md:flex text-[10px] uppercase tracking-widest font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors items-center gap-1.5 border border-red-100"
-            >
-              <div className={`w-2 h-2 rounded-full bg-red-500 ${isPanicking ? 'animate-pulse' : ''}`} />
-              {isPanicking ? "RESET STATE" : "SIMULATE PANIC"}
-            </button>
-            <Link href="/" className="text-sm font-semibold text-[#6b7280] hover:text-[#0a0f1e] transition">Exit App</Link>
-            <ConnectButton 
-              client={client} 
-              theme="light"
-              connectButton={{ className: "btn-primary !text-sm !font-semibold !px-6 !py-3 !text-white" }}
-            />
-          </div>
-        </header>
+    <div className="min-h-screen bg-[#09090B]">
+      <Header />
 
-        <div className="mb-8 text-center sm:text-left">
-           <h1 className="text-3xl sm:text-4xl font-bold text-[#0d1630]">Vault Dashboard</h1>
-           <p className="mt-2 text-sm text-[#6b7280]">Manage your deposits and monitor strategy yield.</p>
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        {/* ── Page Title ─────────────────────────────── */}
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">Vault Dashboard</h1>
+            <p className="mt-1 text-sm text-[#8B8B93]">Manage deposits and monitor strategy yield.</p>
+          </div>
+          {account && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsPanicking(!isPanicking)}
+                className={`badge ${isPanicking ? "badge-danger" : "bg-[#1C1C1F] text-[#8B8B93] border border-[#232326]"} cursor-pointer hover:opacity-80 transition text-xs`}
+              >
+                <div className={`w-2 h-2 rounded-full ${isPanicking ? "bg-[#FF3B5C] animate-pulse" : "bg-[#FF3B5C]"}`} />
+                {isPanicking ? "RESET" : "SIMULATE PANIC"}
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Top Status Panels */}
-        <div className="grid gap-6 md:grid-cols-[1fr_1fr_1fr] mb-8">
-          <div className="white-card rounded-3xl p-6 relative overflow-hidden">
-            <div className="flex justify-between items-start">
-               <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#6b7280] mb-2">Protocol TVL</p>
-                  <p className="text-3xl font-extrabold text-[#0d1630] font-mono tracking-tight">{tvl}</p>
-               </div>
-               <div className="grid size-10 place-items-center rounded-xl bg-[#edf2ff] text-[#3b5bdb]">
-                 <span className="font-bold text-sm">WETH</span>
-               </div>
+        {/* ── Stats Grid ─────────────────────────────── */}
+        <div className="grid gap-6 md:grid-cols-4 mb-8">
+          {/* TVL */}
+          <AnimateOnScroll animation="fadeUp" delay={0}>
+            <div className="glass-card p-8 hover-lift">
+              <p className="stat-label">Protocol TVL</p>
+              <p className="stat-value text-3xl">{tvl}</p>
+              <p className="text-xs text-[#8B8B93] font-mono mt-2">
+                WETH <span className="text-[#56565E]">({formatUsd(Number(tvl), ethPrice)})</span>
+              </p>
             </div>
-            {/* mock positive change */}
-            <p className="mt-4 flex items-center gap-1 text-sm font-semibold text-emerald-500">
-               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
-               +1.24% <span className="text-[#6b7280] font-normal ml-1">Today</span>
-            </p>
-          </div>
-          
-          <div className="white-card rounded-3xl p-6 relative overflow-hidden">
-            <div className="flex justify-between items-start">
-               <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#6b7280] mb-2">Target Yield</p>
-                  <p className="text-3xl font-extrabold text-[#0d1630] font-mono tracking-tight">6.42<span className="text-xl text-[#0d1630]/60 font-sans">%</span></p>
-               </div>
-               <div className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-500">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-               </div>
-            </div>
-            <p className="mt-4 flex items-center gap-1 text-sm font-semibold text-emerald-500">
-               <svg className="w-4 h-4 text-emerald-500 animate-[spin_3s_linear_infinite]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-               +{tickingYield.toFixed(8)} <span className="text-[#6b7280] font-normal ml-1">Live yield (WETH)</span>
-            </p>
-          </div>
+          </AnimateOnScroll>
 
-          <div className="white-card rounded-3xl p-6 relative overflow-hidden">
-             <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#6b7280] mb-2">Risk Gatekeeper</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {effectiveIsPaused === undefined ? (
-                      <p className="text-2xl font-bold text-[#0d1630] animate-pulse">Syncing...</p>
-                    ) : effectiveIsPaused ? (
-                      <>
-                        <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-                        <p className="text-2xl font-bold text-red-500 tracking-tight">PAUSED</p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="h-3 w-3 rounded-full bg-emerald-500" />
-                        <p className="text-2xl font-bold text-[#0d1630] tracking-tight">SECURE</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="grid size-10 place-items-center rounded-xl bg-purple-50 text-purple-600">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-                </div>
-             </div>
-             <div className="mt-4 w-full bg-[#f3f4f6] rounded-full h-1.5 overflow-hidden flex">
-                <div className={`h-full w-[100%] rounded-full ${effectiveIsPaused ? 'bg-red-500' : 'bg-emerald-500 animate-pulse'}`} />
-             </div>
-             <p className={`mt-2 text-xs font-medium ${effectiveIsPaused ? 'text-red-500 animate-pulse' : 'text-[#6b7280]'}`}>{effectiveIsPaused ? 'EMERGENCY SHUTDOWN' : 'Real-time scans active'}</p>
-          </div>
-        </div>
-
-        {/* Main Interface */}
-        <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-          
-          {/* Interaction Console */}
-          <section className="white-card rounded-3xl p-8">
-             <div className="flex items-center gap-8 border-b border-[#e5e7eb] pb-6 mb-8">
-                <button 
-                  onClick={() => setActiveTab("deposit")}
-                  className={`text-sm font-bold uppercase tracking-wider pb-6 -mb-[25px] border-b-2 transition-all duration-300 ${activeTab === "deposit" ? "text-[#2563eb] border-[#2563eb]" : "text-[#6b7280] border-transparent hover:text-[#0d1630]"}`}
-                >
-                  Deposit
-                </button>
-                <button 
-                  onClick={() => setActiveTab("withdraw")}
-                  className={`text-sm font-bold uppercase tracking-wider pb-6 -mb-[25px] border-b-2 transition-all duration-300 ${activeTab === "withdraw" ? "text-[#2563eb] border-[#2563eb]" : "text-[#6b7280] border-transparent hover:text-[#0d1630]"}`}
-                >
-                  Withdraw
-                </button>
-             </div>
-
-             <div>
-                <h2 className="text-2xl font-bold text-[#0d1630] mb-2 tracking-tight">
-                  {activeTab === "deposit" ? "Route Liquidity" : "Reclaim Liquidity"}
-                </h2>
-                <p className="text-sm text-[#6b7280] mb-8 leading-relaxed max-w-md">
-                  {activeTab === "deposit" 
-                    ? "Deposit WETH into the autonomous strategy. Yield generation begins instantly."
-                    : "Withdraw your underlying WETH and accrued yield from the OSZILLOR strategy."}
+          {/* Target APY */}
+          <AnimateOnScroll animation="fadeUp" delay={0.05}>
+            <div className="glass-card p-8 hover-lift">
+              <p className="stat-label">Target Yield</p>
+              <p className="stat-value text-3xl">6.42<span className="text-xl text-[#56565E]">%</span></p>
+              {tickingYield > 0 && (
+                <p className="text-xs font-mono text-[#00FFB2] mt-2 animate-pulse">
+                  +{tickingYield.toFixed(8)} WETH <span className="text-[#56565E]">({formatUsd(tickingYield, ethPrice)})</span>
                 </p>
+              )}
+            </div>
+          </AnimateOnScroll>
 
-                {/* Input Field */}
-                <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-2xl p-4 mb-8 flex items-center justify-between">
-                  <div className="flex-1">
-                     <p className="text-[10px] font-bold uppercase tracking-widest text-[#6b7280] mb-1 pl-2">Amount</p>
-                     <input 
-                        type="number"
-                        value={amount}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/-/g, "");
-                          setAmount(val);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
-                        }}
-                        placeholder="0.00"
-                        className="w-full bg-transparent text-4xl sm:text-5xl font-extrabold text-[#0d1630] placeholder:text-[#d1d5db] focus:outline-none focus:ring-0 pl-2 font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        min="0"
-                        step="0.01"
-                      />
+          {/* Risk */}
+          <AnimateOnScroll animation="fadeUp" delay={0.1}>
+            <div className="glass-card p-8 hover-lift">
+              <p className="stat-label">Risk Gatekeeper</p>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="pulse-ring w-2.5 h-2.5 rounded-full" style={{ backgroundColor: riskColor, color: riskColor }} />
+                <span className="stat-value text-2xl" style={{ color: effectiveIsPaused ? "#FF3B5C" : riskColor }}>
+                  {effectiveIsPaused ? "PAUSED" : riskLabel}
+                </span>
+              </div>
+              {riskScore !== undefined && (
+                <div className="mt-3">
+                  <div className="w-full h-1.5 rounded-full bg-[#1C1C1F] overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(Number(riskScore), 100)}%`,
+                        backgroundColor: riskColor,
+                      }}
+                    />
                   </div>
-                  <div className="flex flex-col items-end justify-center pr-2 gap-3">
-                     <div className="flex flex-col items-end gap-1">
-                        <p className="text-[11px] font-semibold text-[#6b7280]">
-                          Balance: <span className="text-[#0d1630] font-bold">{account ? (activeTab === "deposit" ? formattedWethBalance : formattedVaultShares) : "--"} {activeTab === "deposit" ? "WETH" : "oszWETH"}</span>
-                        </p>
-                        {account && activeTab === "deposit" && Number(formattedWethBalance) < 0.05 && (
-                          <TransactionButton
-                            transaction={() => prepareContractCall({ contract: wethContract, method: erc20Abi[3], params: [account.address, toWei("0.05")] })}
-                            className="!bg-transparent !p-0 !min-w-0 !h-auto !text-[#2563eb] hover:!text-[#1d4ed8] !text-[10px] !font-bold transition-colors !shadow-none"
-                          >
-                            Claim 0.05 Test WETH
-                          </TransactionButton>
-                        )}
-                     </div>
-                     <div className="flex items-center gap-2">
-                         <button 
-                          onClick={() => {
-                            if (account) {
-                              if (activeTab === "deposit" && wethBalance) {
-                                setAmount(toEther(wethBalance));
-                              } else if (activeTab === "withdraw" && vaultShares) {
-                                setAmount(toEther(vaultShares));
-                              } else {
-                                setAmount("0.00");
-                              }
-                            } else {
-                              setAmount("1.0");
-                            }
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-[#edf2ff] hover:bg-[#dfe7ff] text-xs font-bold text-[#2563eb] transition-colors h-10 flex items-center"
-                        >
-                          MAX
-                        </button>
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-[#e5e7eb] shadow-sm h-10">
-                          <div className={`w-5 h-5 rounded-full bg-gradient-to-tr ${activeTab === "deposit" ? 'from-[#3b82f6] to-[#60a5fa] border-[#bfdbfe]' : 'from-[#8b5cf6] to-[#c4b5fd] border-[#ddd6fe]'} border`} />
-                          <span className="text-sm font-bold text-[#0d1630]">{activeTab === "deposit" ? "WETH" : "oszWETH"}</span>
-                        </div>
-                     </div>
+                  <p className="text-[10px] font-mono text-[#56565E] mt-1">Score: {Number(riskScore)}/100</p>
+                </div>
+              )}
+            </div>
+          </AnimateOnScroll>
+
+          {/* Native ETH Balance */}
+          <AnimateOnScroll animation="fadeUp" delay={0.15}>
+            <div className="glass-card p-8 hover-lift">
+              <p className="stat-label">Wallet Balance</p>
+              <p className="stat-value text-2xl">
+                {nativeBalance ? Number(nativeBalance.displayValue).toFixed(4) : "-.--"}
+              </p>
+              <p className="text-xs text-[#56565E] font-mono mt-1">
+                {nativeBalance?.symbol || "ETH"} (native){" "}
+                {nativeBalance && <span className="text-[#8B8B93]">({formatUsd(Number(nativeBalance.displayValue), ethPrice)})</span>}
+              </p>
+              {wethTokenBalance && Number(wethTokenBalance.displayValue) > 0 && (
+                <p className="text-xs font-mono text-[#8B8B93] mt-1">
+                  + {Number(wethTokenBalance.displayValue).toFixed(4)} WETH{" "}
+                  <span className="text-[#56565E]">({formatUsd(Number(wethTokenBalance.displayValue), ethPrice)})</span>
+                </p>
+              )}
+            </div>
+          </AnimateOnScroll>
+        </div>
+
+        {/* ── Main Grid ──────────────────────────────── */}
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+
+          {/* ── Interaction Panel ──────────────────────── */}
+          <AnimateOnScroll animation="fadeUp" delay={0.1}>
+            <section className="glass-card p-8">
+              {/* Tabs */}
+              <div className="flex items-center gap-6 border-b border-[#232326] pb-5 mb-8">
+                {(["deposit", "withdraw"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`text-sm font-bold uppercase tracking-[0.1em] pb-5 -mb-[21px] border-b-2 transition-all ${
+                      activeTab === tab
+                        ? "text-[#00FFB2] border-[#00FFB2]"
+                        : "text-[#56565E] border-transparent hover:text-[#8B8B93]"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <h2 className="text-xl font-bold mb-2">
+                {activeTab === "deposit" ? "Route Liquidity" : "Reclaim Liquidity"}
+              </h2>
+              <p className="text-sm text-[#8B8B93] mb-6 max-w-md">
+                {activeTab === "deposit"
+                  ? "Deposit WETH into the autonomous strategy. Yield generation begins instantly."
+                  : "Withdraw your underlying WETH and accrued yield from the OSZILLOR strategy."}
+              </p>
+
+              {/* Input */}
+              <div className="bg-[#111113] border border-[#232326] rounded-xl p-4 mb-6 input-glow transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="stat-label !mb-0">Amount</p>
+                  <p className="text-xs text-[#56565E] font-medium">
+                    Balance:{" "}
+                    <span className="text-[#8B8B93] font-bold font-mono">
+                      {account ? (activeTab === "deposit" ? formattedWethBalance : formattedVaultShares) : "-.--"}
+                    </span>{" "}
+                    {activeTab === "deposit" ? "WETH" : "oszWETH"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value.replace(/-/g, ""))}
+                    onKeyDown={(e) => { if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault(); }}
+                    placeholder="0.00"
+                    className="w-full bg-transparent text-3xl sm:text-4xl font-extrabold text-[#EBEBEF] placeholder:text-[#2E2E32] focus:outline-none font-mono"
+                    min="0"
+                    step="0.01"
+                  />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        if (!account) return;
+                        if (activeTab === "deposit" && wethBalance) setAmount(toEther(wethBalance));
+                        else if (activeTab === "withdraw" && vaultShares) setAmount(toEther(vaultShares));
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-[rgba(0,255,178,0.08)] border border-[rgba(0,255,178,0.15)] text-[#00FFB2] text-xs font-bold hover:bg-[rgba(0,255,178,0.15)] transition"
+                    >
+                      MAX
+                    </button>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#1C1C1F] border border-[#232326]">
+                      <div className={`w-4 h-4 rounded-full ${activeTab === "deposit" ? "bg-gradient-to-tr from-[#3B82F6] to-[#60A5FA]" : "bg-gradient-to-tr from-[#00FFB2] to-[#00CC8E]"}`} />
+                      <span className="text-sm font-bold text-[#EBEBEF]">{activeTab === "deposit" ? "WETH" : "oszWETH"}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Action Button */}
-                {!account ? (
-                  <div className="w-full py-4 text-center rounded-2xl border border-dashed border-[#d1d5db] bg-[#f9fafb] text-sm font-semibold text-[#6b7280]">
-                    Please connect your wallet to interact
-                  </div>
-                ) : needsApproval ? (
-                   <TransactionButton
-                      transaction={() => prepareContractCall({ contract: wethContract, method: erc20Abi[0], params: [VAULT_ADDRESS, amountWei] })}
-                      className="!w-full !rounded-2xl !bg-[#2563eb] hover:!bg-[#1d4ed8] !text-white !font-bold !text-base !py-4 !shadow-md transition-all"
+                {/* USD preview for input */}
+                {amount && Number(amount) > 0 && (
+                  <p className="mt-2 text-xs font-mono text-[#56565E] pl-1">
+                    &asymp; {formatUsd(Number(amount), ethPrice)} USD
+                  </p>
+                )}
+
+                {/* Test WETH faucet */}
+                {account && activeTab === "deposit" && Number(formattedWethBalance) < 0.05 && (
+                  <div className="mt-3 pt-3 border-t border-[#232326]">
+                    <TransactionButton
+                      transaction={() => prepareContractCall({ contract: wethContract, method: ERC20_ABI.mint, params: [account.address, toWei("0.05")] })}
+                      onError={(e) => setTxError(parseContractError(e))}
+                      theme={oszillorTheme}
+                      className="!bg-transparent !p-0 !min-w-0 !h-auto !text-[#00FFB2] hover:!text-[#00CC8E] !text-xs !font-bold !shadow-none"
                     >
-                      Approve WETH Spend
-                   </TransactionButton>
+                      Claim 0.05 Test WETH
+                    </TransactionButton>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons — 4-state flow: Connect → Network → Approve → Action */}
+              {!account ? (
+                <div className="flex justify-center">
+                  <ConnectButton
+                    client={client}
+                    wallets={wallets}
+                    theme={oszillorTheme}
+                    chain={sepolia}
+                    appMetadata={{
+                      name: "OSZILLOR",
+                      url: "https://oszillor.xyz",
+                      logoUrl: "/oszillor-logo.svg",
+                    }}
+                    connectModal={{ title: "Connect to OSZILLOR", size: "wide" }}
+                    connectButton={{ label: "Connect Wallet to Continue", className: "!w-full !rounded-xl !text-base !font-bold !py-4" }}
+                  />
+                </div>
+              ) : wrongChain ? (
+                <button
+                  onClick={async () => {
+                    setIsSwitching(true);
+                    try { await switchChain(sepolia); }
+                    finally { setIsSwitching(false); }
+                  }}
+                  disabled={isSwitching}
+                  className="btn-mint w-full"
+                >
+                  {isSwitching ? "Switching..." : "Switch to Sepolia"}
+                </button>
+              ) : needsApproval ? (
+                <TransactionButton
+                  transaction={() => prepareContractCall({
+                    contract: wethContract,
+                    method: ERC20_ABI.approve,
+                    params: [VAULT_ADDRESS, amountWei],
+                  })}
+                  onError={(e) => setTxError(parseContractError(e))}
+                  theme={oszillorTheme}
+                  className="!w-full !rounded-xl !bg-[#00FFB2] hover:!bg-[#00CC8E] !text-[#09090B] !font-bold !text-base !py-4 !shadow-[0_0_20px_rgba(0,255,178,0.15)] transition-all"
+                >
+                  Approve WETH
+                </TransactionButton>
+              ) : (
+                <TransactionButton
+                  transaction={() => {
+                    if (activeTab === "deposit") {
+                      return prepareContractCall({ contract: vaultContract, method: VAULT_ABI.deposit, params: [amountWei, account.address] });
+                    } else {
+                      return prepareContractCall({ contract: vaultContract, method: VAULT_ABI.withdraw, params: [amountWei, account.address, account.address] });
+                    }
+                  }}
+                  onTransactionConfirmed={() => {
+                    confetti({
+                      particleCount: 120,
+                      spread: 80,
+                      origin: { y: 0.6 },
+                      colors: ["#00FFB2", "#00CC8E", "#3B82F6", "#EBEBEF"],
+                    });
+                    setAmount("");
+                    setTxError(null);
+                  }}
+                  onError={(e) => setTxError(parseContractError(e))}
+                  disabled={
+                    effectiveIsPaused ||
+                    !amount ||
+                    amountWei === BigInt(0) ||
+                    (activeTab === "deposit" && wethBalance !== undefined && amountWei > wethBalance) ||
+                    (activeTab === "withdraw" && vaultShares !== undefined && amountWei > vaultShares)
+                  }
+                  theme={oszillorTheme}
+                  className="!w-full !rounded-xl !bg-[#00FFB2] hover:!bg-[#00CC8E] !text-[#09090B] !font-bold !text-base !py-4 !shadow-[0_0_20px_rgba(0,255,178,0.15)] transition-all disabled:!opacity-30 disabled:!cursor-not-allowed disabled:!shadow-none"
+                >
+                  {activeTab === "deposit" ? "Execute Deposit" : "Execute Withdrawal"}
+                </TransactionButton>
+              )}
+
+              {/* Inline error display */}
+              {txError && (
+                <div className="mt-3 flex items-start gap-2 p-3 rounded-xl bg-[rgba(255,59,92,0.08)] border border-[rgba(255,59,92,0.15)]">
+                  <svg className="w-4 h-4 text-[#FF3B5C] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-sm text-[#FF3B5C] font-medium">{txError}</p>
+                </div>
+              )}
+
+              {/* Insufficient balance warnings */}
+              {amount && amountWei > BigInt(0) && activeTab === "deposit" && wethBalance !== undefined && amountWei > wethBalance && (
+                <p className="mt-3 text-sm text-[#FF3B5C] font-bold text-center">Insufficient WETH balance.</p>
+              )}
+              {amount && amountWei > BigInt(0) && activeTab === "withdraw" && vaultShares !== undefined && amountWei > vaultShares && (
+                <p className="mt-3 text-sm text-[#FF3B5C] font-bold text-center">Insufficient oszWETH balance.</p>
+              )}
+
+              {/* Emergency warning */}
+              {effectiveIsPaused && (
+                <div className="mt-4 flex items-start gap-2 p-4 rounded-xl bg-[rgba(255,59,92,0.06)] border border-[rgba(255,59,92,0.12)]">
+                  <svg className="w-5 h-5 text-[#FF3B5C] shrink-0 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-sm text-[#FF3B5C] font-medium">
+                    Vault is safeguarded. Operations are halted until the AI Gatekeeper resolves the anomaly.
+                  </p>
+                </div>
+              )}
+            </section>
+          </AnimateOnScroll>
+
+          {/* ── Right Panel: Strategy + Yield ──────────── */}
+          <div className="space-y-6">
+            {/* Live Position */}
+            <AnimateOnScroll animation="fadeUp" delay={0.15}>
+              <div className="glass-card p-8">
+                <p className="stat-label mb-4">Your Live Position</p>
+                <div className="bg-[#111113] border border-[#232326] rounded-xl p-4 mb-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#56565E] mb-1">Unrealized Yield</p>
+                      <p className="font-mono text-[#00FFB2] font-extrabold text-lg">
+                        +{tickingYield.toFixed(8)} <span className="text-xs">WETH</span>
+                      </p>
+                      <p className="text-[10px] font-mono text-[#56565E]">{formatUsd(tickingYield, ethPrice)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#56565E] mb-1">Total Value</p>
+                      <p className="font-mono text-[#EBEBEF] font-bold text-lg">
+                        {(vaultSharesNum + tickingYield).toFixed(6)} <span className="text-xs">WETH</span>
+                      </p>
+                      <p className="text-[10px] font-mono text-[#56565E]">{formatUsd(vaultSharesNum + tickingYield, ethPrice)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Strategy Allocation */}
+                <p className="stat-label mb-3">Strategy Allocation</p>
+                <div className="space-y-2">
+                  <div className="card-elevated p-3 flex justify-between items-center">
+                    <span className="font-mono text-sm text-[#EBEBEF] font-bold">Vault Reserves</span>
+                    <span className="font-mono text-sm text-[#8B8B93]">
+                      {vaultWethBalance ? Number(toEther(vaultWethBalance)).toFixed(4) : "0.0000"} WETH
+                    </span>
+                  </div>
+                  <div className="bg-[rgba(0,255,178,0.04)] border border-[rgba(0,255,178,0.1)] rounded-xl p-3 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-[#00FFB2] animate-pulse" />
+                      <span className="font-mono text-sm text-[#00FFB2] font-bold">Lido (Active)</span>
+                    </div>
+                    <span className="font-mono text-sm text-[#00FFB2]">
+                      {strategyTotalValue ? Number(toEther(strategyTotalValue)).toFixed(4) : "0.0000"} WETH
+                    </span>
+                  </div>
+                  {currentEthPct !== undefined && (
+                    <div className="card-elevated p-3 flex justify-between items-center">
+                      <span className="text-xs text-[#56565E] font-semibold">ETH Allocation</span>
+                      <span className="font-mono text-xs text-[#8B8B93] font-bold">{ethPctDisplay}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </AnimateOnScroll>
+
+            {/* PayEmbed — Buy ETH directly */}
+            <AnimateOnScroll animation="fadeUp" delay={0.2}>
+              <div className="glass-card p-8">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="stat-label !mb-0">Fund Wallet</p>
+                  <button
+                    onClick={() => setShowPayEmbed(!showPayEmbed)}
+                    className="text-xs font-bold text-[#00FFB2] hover:text-[#00CC8E] transition"
+                  >
+                    {showPayEmbed ? "Hide" : "Buy ETH"}
+                  </button>
+                </div>
+                {showPayEmbed ? (
+                  <PayEmbed
+                    client={client}
+                    theme={oszillorTheme}
+                    payOptions={{
+                      mode: "fund_wallet",
+                      metadata: { name: "Fund OSZILLOR Wallet" },
+                      prefillBuy: {
+                        chain: sepolia,
+                        amount: "0.01",
+                      },
+                    }}
+                  />
                 ) : (
-                   <TransactionButton
-                       transaction={() => {
-                        if (activeTab === "deposit") {
-                          return prepareContractCall({ contract: vaultContract, method: vaultAbi[0], params: [amountWei, account.address] });
-                        } else {
-                          // withdraw(uint256 assets, address receiver, address owner)
-                          return prepareContractCall({ contract: vaultContract, method: vaultAbi[3], params: [amountWei, account.address, account.address] });
-                        }
-                      }}
-                      onTransactionConfirmed={() => {
-                        confetti({
-                          particleCount: 100,
-                          spread: 70,
-                          origin: { y: 0.6 },
-                          colors: ['#2563eb', '#3b82f6', '#10b981', '#34d399']
-                        });
-                        setAmount("");
-                      }}
-                      disabled={effectiveIsPaused || !amount || amountWei === BigInt(0) || (activeTab === "deposit" && wethBalance !== undefined && amountWei > wethBalance) || (activeTab === "withdraw" && vaultShares !== undefined && amountWei > vaultShares)}
-                      className="!w-full !rounded-2xl !bg-[#2563eb] hover:!bg-[#1d4ed8] !text-white !font-bold !text-base !py-4 transition-all disabled:!opacity-50 disabled:!cursor-not-allowed !shadow-md"
-                    >
-                      {activeTab === "deposit" ? "Execute Deposit" : "Execute Withdrawal"}
-                   </TransactionButton>
+                  <p className="text-sm text-[#56565E]">
+                    Buy ETH directly with card or crypto to fund your vault deposits.
+                  </p>
                 )}
-                
-                {amount && amountWei > BigInt(0) && activeTab === "deposit" && wethBalance !== undefined && amountWei > wethBalance && (
-                  <p className="mt-3 text-sm text-red-500 font-bold text-center">Insufficient WETH balance.</p>
-                )}
-                {amount && amountWei > BigInt(0) && activeTab === "withdraw" && vaultShares !== undefined && amountWei > vaultShares && (
-                  <p className="mt-3 text-sm text-red-500 font-bold text-center">Insufficient oszWETH balance.</p>
-                )}
-                
-                {effectiveIsPaused && (
-                  <div className="mt-4 flex items-start gap-2 text-red-600 bg-red-50 p-4 rounded-2xl border border-red-100">
-                    <svg viewBox="0 0 24 24" className="w-5 h-5 shrink-0" fill="none" stroke="currentColor">
-                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <p className="text-sm font-medium">Smart contracts are currently safeguarded. Operations are halted until the AI Gatekeeper resolves the anomaly.</p>
+              </div>
+            </AnimateOnScroll>
+
+            {/* Recent Events */}
+            {sortedEvents.length > 0 && (
+              <AnimateOnScroll animation="fadeUp" delay={0.25}>
+                <div className="glass-card p-8">
+                  <p className="stat-label mb-3">Recent Activity</p>
+                  <div className="space-y-2 font-mono text-xs">
+                    {sortedEvents.map((evt, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 rounded-lg hover:bg-[#111113] transition">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />
+                          <span className="text-[#56565E]">#{evt.blockNumber.toString()}</span>
+                        </div>
+                        <span className="text-[#00FFB2] font-bold">
+                          +{Number(toEther((evt.args as unknown as { assets: bigint }).assets)).toFixed(4)} WETH
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                )}
-             </div>
-          </section>
-
-          {/* Right: Chart Mock */}
-          <section className="white-card rounded-3xl p-8 flex flex-col items-center justify-center relative overflow-hidden text-center">
-             <div className="absolute top-0 right-0 w-64 h-64 bg-[#edf2ff] rounded-full blur-3xl opacity-50 -z-10" />
-             <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#edf2ff] rounded-full blur-3xl opacity-50 -z-10" />
-             
-             <div className="w-16 h-16 bg-[#edf2ff] text-[#2563eb] rounded-2xl flex items-center justify-center mx-auto mb-6">
-               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-             </div>
-             
-             <h3 className="text-xl font-bold text-[#0d1630] mb-2">Automated Yield Engine</h3>
-             <p className="text-sm text-[#6b7280] max-w-sm">
-               Your WETH is continuously deployed across safe strategies to ensure optimal risk-adjusted APY. 
-             </p>
-
-             <div className="mt-8 w-full">
-               <div className="flex justify-between text-[10px] font-bold text-[#6b7280] mb-2 px-2 uppercase tracking-widest">
-                 <span>Your Live Position</span>
-               </div>
-               <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl p-4 flex justify-between items-center transition-all hover:border-[#d1d5db] mb-6 shadow-inner relative overflow-hidden">
-                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-100 rounded-full blur-2xl opacity-50 -z-10" />
-                 <div className="flex flex-col text-left">
-                    <span className="text-[10px] font-bold text-[#6b7280] uppercase tracking-wider mb-1">Unrealized Yield</span>
-                    <span className="font-mono text-emerald-600 font-extrabold text-lg tracking-tight">+{tickingYield.toFixed(8)} <span className="text-xs">WETH</span></span>
-                 </div>
-                 <div className="flex flex-col text-right">
-                    <span className="text-[10px] font-bold text-[#6b7280] uppercase tracking-wider mb-1">Total Value</span>
-                    <span className="font-mono text-[#0d1630] font-bold text-lg tracking-tight">{(vaultSharesNum + tickingYield).toFixed(6)} <span className="text-xs">WETH</span></span>
-                 </div>
-               </div>
-
-               <div className="flex justify-between text-xs font-bold text-[#6b7280] mb-2 px-2 uppercase tracking-wide">
-                 <span>Strategy Allocation</span>
-               </div>
-               <div className="flex flex-col gap-2">
-                 <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl p-4 flex justify-between items-center transition-all hover:border-[#d1d5db]">
-                   <span className="font-mono text-[#0d1630] font-bold tracking-tight">Vault Reserves</span>
-                   <span className="font-mono text-[#6b7280] font-bold">{vaultWethBalance ? Number(toEther(vaultWethBalance)).toFixed(4) : "0.0000"} WETH</span>
-                 </div>
-                 <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex justify-between items-center transition-all shadow-sm">
-                   <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                      <span className="font-mono text-emerald-800 font-bold tracking-tight">Lido (Active)</span>
-                   </div>
-                   <span className="font-mono text-emerald-600 font-bold">{strategyWethBalance ? Number(toEther(strategyWethBalance)).toFixed(4) : "0.0000"} WETH</span>
-                 </div>
-               </div>
-             </div>
-          </section>
-
+                </div>
+              </AnimateOnScroll>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Floating AI Terminal */}
+        {/* ── Contract Addresses ──────────────────────── */}
+        <div className="mt-12 pt-8 border-t border-[#232326] flex flex-wrap justify-center gap-x-8 gap-y-2 text-center">
+          <AddressDisplay address={VAULT_ADDRESS} label="Vault" />
+          <AddressDisplay address={WETH_ADDRESS} label="WETH" />
+          <AddressDisplay address={STRATEGY_ADDRESS} label="Strategy" />
+        </div>
+      </main>
+
+      {/* ── Floating AI Terminal ─────────────────────── */}
       {isPanicking && (
-        <div className="fixed bottom-6 right-6 w-[28rem] bg-[#030B1A] border border-[#1D4ED8]/30 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col font-mono text-xs sm:text-sm animate-in slide-in-from-bottom-5 fade-in duration-300">
-          <div className="bg-[#0a1128] px-4 py-3 flex justify-between items-center border-b border-[#1D4ED8]/20">
-            <span className="uppercase tracking-widest text-[#60a5fa] font-bold">OSZILLOR AI SECURE FEED</span>
-            <div className="flex gap-1.5">
-               <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+        <div className="fixed bottom-6 right-6 w-[26rem] terminal z-50 shadow-2xl shadow-black/50" style={{ animation: "fade-in-up 0.3s ease-out" }}>
+          <div className="terminal-header">
+            <span className="text-[10px] tracking-[0.15em] text-[#00FFB2] font-bold uppercase">OSZILLOR AI FEED</span>
+            <div className="terminal-dots">
+              <span className="bg-[#FF3B5C] animate-pulse" />
             </div>
           </div>
-          <div className="p-5 text-[#60a5fa] h-56 overflow-y-auto space-y-2.5 flex flex-col justify-end leading-relaxed">
-             {mockLogs.filter(Boolean).map((log, i) => (
-               <div key={i} className={log.includes("FATAL") || log.includes("DIRECTIVE") ? "text-red-400 font-bold" : ""}>
-                 {log}
-               </div>
-             ))}
-             <div className="animate-pulse w-2 h-4 bg-[#60a5fa] mt-1 inline-block" />
+          <div className="terminal-body h-56 overflow-y-auto space-y-2 flex flex-col justify-end">
+            {mockLogs.map((log, i) => (
+              <div key={i} className={log.includes("FATAL") || log.includes("DIRECTIVE") ? "text-[#FF3B5C] font-bold" : ""}>
+                {log}
+              </div>
+            ))}
+            <span className="w-2 h-4 bg-[#00FFB2]/70 animate-pulse inline-block mt-1" />
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

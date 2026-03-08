@@ -1,0 +1,30 @@
+import { darkTheme } from "thirdweb/react";
+
+export const oszillorTheme = darkTheme({
+  colors: {
+    primaryButtonBg: "#00FFB2",
+    primaryButtonText: "#09090B",
+    modalBg: "#111113",
+    borderColor: "#232326",
+    accentButtonBg: "#00FFB2",
+    accentButtonText: "#09090B",
+    connectedButtonBg: "#161618",
+    connectedButtonBgHover: "#1C1C1F",
+    secondaryButtonBg: "#1C1C1F",
+    secondaryButtonHoverBg: "#232326",
+    secondaryButtonText: "#EBEBEF",
+    separatorLine: "#232326",
+    skeletonBg: "#1C1C1F",
+    selectedTextBg: "#00FFB2",
+    selectedTextColor: "#09090B",
+    tooltipBg: "#1C1C1F",
+    tooltipText: "#EBEBEF",
+    inputAutofillBg: "#161618",
+    secondaryText: "#8B8B93",
+    danger: "#FF3B5C",
+    success: "#00FFB2",
+    secondaryIconColor: "#56565E",
+    secondaryIconHoverBg: "#1C1C1F",
+    secondaryIconHoverColor: "#EBEBEF",
+  },
+});

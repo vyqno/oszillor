@@ -75,6 +75,20 @@ library ShareMath {
         shares = Math.mulDiv(amount, 1e18, rebaseIndex, Math.Rounding.Floor);
     }
 
+    /// @notice Converts an asset amount to shares using Ceil rounding.
+    /// @dev HIGH-NEW-05 fix: Used by approve() so that allowance() never returns
+    ///      less than the approved amount after the shares→amount roundtrip.
+    /// @param amount Asset amount to convert.
+    /// @param rebaseIndex Current global rebase index (1e18 precision).
+    /// @return shares Equivalent number of internal shares (rounded up).
+    function amountToSharesByIndexCeil(uint256 amount, uint256 rebaseIndex)
+        internal
+        pure
+        returns (uint256 shares)
+    {
+        shares = Math.mulDiv(amount, 1e18, rebaseIndex, Math.Rounding.Ceil);
+    }
+
     /// @notice Converts shares to an asset amount using the global rebase index.
     /// @dev Used by balanceOf — returns the user-facing "rebased" balance.
     /// @param shares Number of internal shares.

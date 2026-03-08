@@ -4,7 +4,9 @@
 #  Risk-Managed ETH Yield Vault • Chainlink CRE + CCIP + AI + Privacy
 # ══════════════════════════════════════════════════════════════════════════════
 #  Usage:
-#    bash demo/e2e-master.sh
+#    bash demo/e2e-master.sh                     # Base Sepolia (default)
+#    bash demo/e2e-master.sh --chain base-sepolia
+#    bash demo/e2e-master.sh --chain sepolia
 # ══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -13,23 +15,64 @@ DEMO_START=$SECONDS
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Load .env (API keys sourced from environment — never hardcoded)
-source "$PROJECT_ROOT/contracts/.env"
-RPC="${SEPOLIA_RPC_URL}"
+# ── Parse args ────────────────────────────────────────────────────────────────
+CHAIN="base-sepolia"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --chain) CHAIN="$2"; shift 2;;
+    *) echo "Unknown arg: $1"; exit 1;;
+  esac
+done
 
-# Deployed Addresses
-VAULT="$VAULT_ADDRESS"
-TOKEN="$TOKEN_ADDRESS"
-STRATEGY="$STRATEGY_ADDRESS"
-MOCK_LIDO="$MOCK_LIDO_ADDRESS"
-WETH="$WETH_ADDRESS"
+# ── Load .env ─────────────────────────────────────────────────────────────────
+export $(grep -v '^#' "$PROJECT_ROOT/contracts/.env" | grep -v '^$' | xargs) 2>/dev/null
+
+# ── Chain-specific config ─────────────────────────────────────────────────────
+case "$CHAIN" in
+  base-sepolia|base)
+    CHAIN_LABEL="Base Sepolia"
+    CHAIN_ID=84532
+    RPC="${BASE_SEPOLIA_RPC_URL}"
+    EXPLORER="https://sepolia.basescan.org"
+    VAULT="0xa120B2d1acdc17FbB6C49BD222C05D74e1b0691d"
+    TOKEN="0x86fFd6Bd8F9c6E89B7E5D7e310E6D0057fF560E0"
+    STRATEGY="0x495BAD77D91afA0fc03Fe24A0C074966d2e34A96"
+    RISK_ENGINE="0x69A213a7BcB23d8693f558bAcD6192F5605BEFAD"
+    REBASE_EXECUTOR="0x35Bf9dE18C872Ae9B5E1B55425390ADef31514DC"
+    EVENT_SENTINEL="0x424FB4395a95153802B3A4c1cfb2514B0aBF8732"
+    MOCK_LIDO="0x800527792FDeC4aEb8B4fd510C669dacA4e7309D"
+    ALERT_REGISTRY="0x62998075686658C6069de79A05461Aed91663265"
+    TOKEN_POOL="0x63F47EFc17183CB30bd72D3ecA3122850d1084A7"
+    HUB_PEER="0x9269Da439a4fBc2601E4f5BC4A9AEeD292319008"
+    WETH="0x4200000000000000000000000000000000000006"
+    DEPOSIT_AMOUNT="1000000000000000"    # 0.001 ETH (MIN_DEPOSIT is 1e15)
+    ;;
+  sepolia|eth-sepolia)
+    CHAIN_LABEL="Ethereum Sepolia"
+    CHAIN_ID=11155111
+    RPC="${SEPOLIA_RPC_URL}"
+    EXPLORER="https://sepolia.etherscan.io"
+    VAULT="0xbb6b66c2bd6c3e53869726f1eadc8cf824f8ff1d"
+    TOKEN="0xd17107316431bc9626bad4d25f584fae5df1630a"
+    STRATEGY="0xdf6e5ebcaaff2a2a40c4a3e6b89e936a13747ccf"
+    RISK_ENGINE="0x31b3cfb370de8b7b13bda40f105901ad7a68ebb0"
+    REBASE_EXECUTOR="0xeaa638afeb35d2020907856a8a4d5d092037d851"
+    EVENT_SENTINEL="0x0490c9a22e1dc8084fe18f8977a81bb42e5b341f"
+    MOCK_LIDO="0x02bdfd4659386db44846cb0a04634b823bf8bbeb"
+    ALERT_REGISTRY=""
+    TOKEN_POOL="0x031499719b6cdc5705ab1628bc3eea6b98a90a62"
+    HUB_PEER="0xf42a60dd901b94223305f5fa7051960d8c09dbdf"
+    WETH="0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+    DEPOSIT_AMOUNT="10000000000000000"  # 0.01 ETH
+    ;;
+  *)
+    echo "Unknown chain: $CHAIN"
+    echo "  Use: --chain base-sepolia  or  --chain sepolia"
+    exit 1
+    ;;
+esac
+
 DEPLOYER="$DEPLOYER_ADDRESS"
-RISK_ENGINE="$RISK_ENGINE_ADDRESS"
-REBASE_EXECUTOR="$REBASE_EXECUTOR_ADDRESS"
-EVENT_SENTINEL="$EVENT_SENTINEL_ADDRESS"
-
-DEPOSIT_AMOUNT="10000000000000000"  # 0.01 WETH
-EXPLORER="https://sepolia.etherscan.io"
 
 # ── Terminal Colors & Effects ────────────────────────────────────────────────
 GOLD='\033[38;5;220m'
@@ -81,7 +124,6 @@ wei_to_eth() {
   node -e "const w=BigInt('${wei}');const d=w*10000n/BigInt(1e18);const s=d.toString();if(s.length<=4){console.log('0.'+s.padStart(4,'0'))}else{console.log(s.slice(0,-4)+'.'+s.slice(-4))}" 2>/dev/null || echo "0.0000"
 }
 
-# Compute wei delta and format with color (green +, red -)
 wei_delta() {
   local before after
   before=$(clean_cast "$1")
@@ -125,17 +167,21 @@ EOF
 print_system_info() {
   printf "  ${BOLD}${WHITE}System Overview${RESET}\n"
   printf "  ${DIM}──────────────────────────────────────────────────────────────────${RESET}\n"
-  printf "  ${DIM}Network:${RESET}       Ethereum Sepolia (chainId 11155111)\n"
+  printf "  ${DIM}Network:${RESET}       ${GOLD}${CHAIN_LABEL}${RESET} (chainId ${CHAIN_ID})\n"
   printf "  ${DIM}Vault:${RESET}         ${CYAN}${VAULT}${RESET}\n"
   printf "  ${DIM}Strategy:${RESET}      ${CYAN}${STRATEGY}${RESET}\n"
   printf "  ${DIM}RiskEngine:${RESET}    ${CYAN}${RISK_ENGINE}${RESET}\n"
   printf "  ${DIM}Sentinel:${RESET}      ${CYAN}${EVENT_SENTINEL}${RESET}\n"
   printf "  ${DIM}Rebase Exec:${RESET}   ${CYAN}${REBASE_EXECUTOR}${RESET}\n"
+  if [[ -n "$ALERT_REGISTRY" ]]; then
+    printf "  ${DIM}AlertRegistry:${RESET} ${CYAN}${ALERT_REGISTRY}${RESET}\n"
+  fi
   printf "  ${DIM}──────────────────────────────────────────────────────────────────${RESET}\n"
   printf "  ${DIM}CRE Workflows:${RESET}\n"
   printf "    ${GOLD}W1${RESET} Risk Scanner      │ Cron 30s │ HTTP + AI + ConfidentialHTTP + EVM Write\n"
   printf "    ${GOLD}W2${RESET} Event Sentinel     │ Cron 15s │ HTTP Crash Detect + EVM Write\n"
   printf "    ${GOLD}W3${RESET} Rebase Executor    │ Cron 5m  │ EVM Read + Compute + EVM Write\n"
+  printf "    ${GOLD}W4${RESET} Risk Alerts        │ HTTP+Cron│ x402 Payments + Cross-Chain EVM Read\n"
   printf "  ${DIM}──────────────────────────────────────────────────────────────────${RESET}\n\n"
   sleep 2
 }
@@ -211,10 +257,13 @@ extract_tx_hash() {
   echo "$1" | node -e '
     const fs = require("fs");
     const raw = fs.readFileSync(0, "utf-8");
-    // Prefer the txHash field from CRE JSON output
+    // CRE workflow output
     const txField = raw.match(/"txHash"\s*:\s*"(0x[a-fA-F0-9]{64})"/);
     if (txField) { console.log(txField[1]); process.exit(0); }
-    // Fallback: find any 64-char hex that is not all zeros
+    // cast send output (cross-platform — handles both "transactionHash  0x..." and "transactionHash 0x...")
+    const castTx = raw.match(/transactionHash\s+(0x[a-fA-F0-9]{64})/);
+    if (castTx) { console.log(castTx[1]); process.exit(0); }
+    // Fallback: last 64-char hex
     const hashes = (raw.match(/0x[a-fA-F0-9]{64}/g) || [])
       .filter(h => !/^0x0+$/.test(h));
     if (hashes.length > 0) {
@@ -225,11 +274,18 @@ extract_tx_hash() {
   ' || echo '0x...'
 }
 
-# Fetch tx receipt and print block/gas/status
+# Extract tx hash from cast send output (robust for MINGW/Windows/Linux)
+extract_cast_tx() {
+  echo "$1" | node -e '
+    const raw = require("fs").readFileSync(0, "utf-8");
+    const m = raw.match(/transactionHash\s+(0x[a-fA-F0-9]{64})/);
+    if (m) { console.log(m[1]); } else { console.log("0x..."); }
+  ' || echo '0x...'
+}
+
 verify_tx_receipt() {
   local label="$1"
   local tx_hash="$2"
-  # Skip if no hash, placeholder, or all zeros
   if [[ "$tx_hash" == "0x..." || "$tx_hash" == "0x" || "$tx_hash" =~ ^0x0+$ ]]; then
     printf "  ${DIM}[%s] No on-chain tx (workflow skipped write)${RESET}\n" "$label"
     return
@@ -264,12 +320,10 @@ rocket_crash() {
   echo -e "  ${RED}${BLINK}${BOLD}>> ALARM: SEVERE MARKET CRASH DETECTED ON LIDO STETH${RESET}"
   echo ""
 
-  # Print first frame
   echo -e "${frames[0]}"
   sleep 0.4
 
   for ((i=1; i<${#frames[@]}; i++)); do
-    # Move cursor up 9 lines to overwrite the previous frame
     printf "\033[9A"
     echo -e "${frames[$i]}"
     sleep 0.4
@@ -284,7 +338,6 @@ ai_analysis() {
     sleep 0.5
 
     echo -e "  ${DIM}[Oszillor AI] Fetching live ETH/stETH market data from CoinGecko...${RESET}"
-    # Fetch real live data
     local price_data=$(curl -s --max-time 3 "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,staked-ether&vs_currencies=usd" || echo '{"ethereum":{"usd":3000},"staked-ether":{"usd":2900}}')
     local eth_price=$(echo "$price_data" | grep -o '"ethereum":{"usd":[0-9.]*' | cut -d':' -f3 | tr -d '}' || echo "3000")
     local steth_price=$(echo "$price_data" | grep -o '"staked-ether":{"usd":[0-9.]*' | cut -d':' -f3 | tr -d '}' || echo "2900")
@@ -360,32 +413,67 @@ format_elapsed() {
 print_header
 print_system_info
 
+# ── STEP 0: Seed Risk State (for stale deployments) ──────────────────────────
+type_line "STEP 0  Seeding Initial CRE Risk Data" "$AMBER"
+simulate_processing "Checking vault risk state freshness..." 1
+
+# RISK_MANAGER_ROLE = keccak256("RISK_MANAGER_ROLE")
+RISK_MANAGER_ROLE=$(cast keccak "RISK_MANAGER_ROLE")
+
+# Check if deployer already has RISK_MANAGER_ROLE
+HAS_ROLE=$(cast call $VAULT "hasRole(bytes32,address)(bool)" $RISK_MANAGER_ROLE $DEPLOYER --rpc-url $RPC 2>/dev/null || echo "false")
+HAS_ROLE_CLEAN=$(clean_cast "$HAS_ROLE")
+GRANTED_NOW=false
+
+if [[ "$HAS_ROLE_CLEAN" != "true" ]]; then
+  simulate_processing "Granting RISK_MANAGER_ROLE to deployer..." 1
+  cast send $VAULT "grantRole(bytes32,address)" $RISK_MANAGER_ROLE $DEPLOYER --account deployer --rpc-url $RPC >/dev/null 2>&1
+  GRANTED_NOW=true
+fi
+
+simulate_processing "Refreshing risk score (CAUTION=50, confidence=100)..." 1
+REASONING_HASH="0x64656d6f2d696e69740000000000000000000000000000000000000000000000"
+cast send $VAULT "updateRiskScore(uint256,uint256,bytes32)" 50 100 $REASONING_HASH --account deployer --rpc-url $RPC >/dev/null 2>&1
+echo -e "  ${GREEN}✓${RESET} ${DIM}Risk state refreshed — deposits unlocked${RESET}"
+
+echo ""
+printf "  ${DIM}══════════════════════════════════════════════════════════════════${RESET}\n\n"
+
 # ── STEP 1: User Deposit ─────────────────────────────────────────────────────
-type_line "STEP 1  User Deposit via Frontend (Sepolia Live Network)" "$CYAN"
+type_line "STEP 1  User Deposit via Frontend (${CHAIN_LABEL} Live Network)" "$CYAN"
 
 simulate_processing "Snapshotting pre-deposit balances..." 1
 PRE_BALANCES=$(fetch_balances)
 display_balances "PRE-DEPOSIT" "$PRE_BALANCES"
 IFS=',' read -r pre_w_weth pre_w_osz pre_v_weth pre_s_weth pre_l_weth <<< "$PRE_BALANCES"
 
-# Check & wrap if necessary
+# Check & wrap if necessary — dynamically calculate exact amount needed
 w_weth_clean=$(clean_cast "$pre_w_weth")
 if [[ "$w_weth_clean" -lt "$DEPOSIT_AMOUNT" ]]; then
-  echo -ne "  ${AMBER}! ${DIM}Low WETH detected. Auto-wrapping 0.05 ETH...${RESET}"
-  cast send $WETH "deposit()" --value 50000000000000000 --account deployer --rpc-url $RPC >/dev/null 2>&1
-  echo -e "\r  ${GREEN}✓${RESET} ${DIM}Auto-wrapped 0.05 ETH to WETH.       ${RESET}"
+  # Calculate how much more WETH is needed
+  WRAP_NEEDED=$(node -e "const need=BigInt('${DEPOSIT_AMOUNT}')-BigInt('${w_weth_clean}');console.log((need>0n?need:0n).toString())")
+  # Add 10% buffer for rounding
+  WRAP_AMOUNT=$(node -e "const n=BigInt('${WRAP_NEEDED}');console.log((n+n/10n).toString())")
+  echo -ne "  ${AMBER}! ${DIM}Low WETH detected. Wrapping ${WRAP_AMOUNT} wei...${RESET}"
+  if ! cast send $WETH "deposit()" --value $WRAP_AMOUNT --account deployer --rpc-url $RPC >/dev/null 2>&1; then
+    echo -e "\r  ${RED}!${RESET} ${DIM}Wrap failed — trying with exact amount...${RESET}"
+    cast send $WETH "deposit()" --value $WRAP_NEEDED --account deployer --rpc-url $RPC >/dev/null 2>&1 || true
+  fi
+  echo -e "\r  ${GREEN}✓${RESET} ${DIM}Auto-wrapped ETH to WETH.              ${RESET}"
   # Re-snapshot after wrap
   PRE_BALANCES=$(fetch_balances)
   IFS=',' read -r pre_w_weth pre_w_osz pre_v_weth pre_s_weth pre_l_weth <<< "$PRE_BALANCES"
 fi
 
 simulate_processing "Approving WETH spend via ERC-20 approve()" 1
-TX_APPROVE=$(cast send $WETH "approve(address,uint256)" $VAULT $DEPOSIT_AMOUNT --account deployer --rpc-url $RPC 2>&1 | grep "^transactionHash " | awk '{print $2}' || echo "0x...")
+APPROVE_OUTPUT=$(cast send $WETH "approve(address,uint256)" $VAULT $DEPOSIT_AMOUNT --account deployer --rpc-url $RPC 2>&1 || true)
+TX_APPROVE=$(extract_cast_tx "$APPROVE_OUTPUT")
 
 simulate_processing "Broadcasting atomic deposit — routing to strategy" 2
-TX_DEPOSIT=$(cast send $VAULT "deposit(uint256)" $DEPOSIT_AMOUNT --account deployer --rpc-url $RPC 2>&1 | grep "^transactionHash " | awk '{print $2}' || echo "0x...")
+DEPOSIT_OUTPUT=$(cast send $VAULT "deposit(uint256)" $DEPOSIT_AMOUNT --account deployer --rpc-url $RPC 2>&1 || true)
+TX_DEPOSIT=$(extract_cast_tx "$DEPOSIT_OUTPUT")
 
-echo -e "  ${GREEN}✓${RESET} ${DIM}Deposit confirmed on Sepolia${RESET}"
+echo -e "  ${GREEN}✓${RESET} ${DIM}Deposit confirmed on ${CHAIN_LABEL}${RESET}"
 verify_tx_receipt "Deposit" "$TX_DEPOSIT"
 echo ""
 
@@ -463,8 +551,26 @@ echo ""
 sleep 1
 printf "  ${DIM}══════════════════════════════════════════════════════════════════${RESET}\n\n"
 
-# ── STEP 6: Final Verification ───────────────────────────────────────────────
-type_line "STEP 6  Final Atomic State Verification" "$GOLD"
+# ── STEP 6: Risk Alerts (W4) — Only on Base Sepolia ──────────────────────────
+if [[ -n "$ALERT_REGISTRY" ]]; then
+  type_line "STEP 6  Risk Alert System (CRE Workflow W4 + x402)" "$GOLD"
+  simulate_processing "Evaluating active alert subscriptions..." 1
+  echo -e "  ${CYAN}>> Checking AlertRegistry for triggered rules (cross-chain EVM read)...${RESET}"
+  CRE_OUTPUT_4=$(cre workflow simulate ./oszillor-risk-alerts --target staging-settings --non-interactive --trigger-index 1 2>&1 || true)
+  parse_cre_output "$CRE_OUTPUT_4"
+  echo -e "  ${GREEN}✓${RESET} ${DIM}W4 alert evaluation complete (x402-gated risk data)${RESET}"
+  echo -e "  ${DIM}[ALERTS] AlertRegistry: ${ALERT_REGISTRY}${RESET}"
+  echo ""
+
+  sleep 1
+  printf "  ${DIM}══════════════════════════════════════════════════════════════════${RESET}\n\n"
+  FINAL_STEP=7
+else
+  FINAL_STEP=6
+fi
+
+# ── FINAL STEP: Verification ─────────────────────────────────────────────────
+type_line "STEP ${FINAL_STEP}  Final Atomic State Verification" "$GOLD"
 simulate_processing "Querying updated contract balances..." 2
 
 POST_BALANCES=$(fetch_balances)
@@ -480,7 +586,7 @@ echo ""
 DEMO_ELAPSED=$((SECONDS - DEMO_START))
 
 printf "  ${GOLD}${BOLD}══════════════════════════════════════════════════════════════════${RESET}\n"
-printf "  ${GOLD}${BOLD}  PROOF OF EXECUTION — SEPOLIA LIVE TRANSACTIONS${RESET}\n"
+printf "  ${GOLD}${BOLD}  PROOF OF EXECUTION — ${CHAIN_LABEL^^} LIVE TRANSACTIONS${RESET}\n"
 printf "  ${GOLD}${BOLD}══════════════════════════════════════════════════════════════════${RESET}\n\n"
 
 printf "  ${BOLD}${WHITE}Deployed Contracts${RESET}\n"
@@ -491,6 +597,11 @@ printf "  Strategy:       ${CYAN}${EXPLORER}/address/${STRATEGY}${RESET}\n"
 printf "  RiskEngine:     ${CYAN}${EXPLORER}/address/${RISK_ENGINE}${RESET}\n"
 printf "  EventSentinel:  ${CYAN}${EXPLORER}/address/${EVENT_SENTINEL}${RESET}\n"
 printf "  RebaseExecutor: ${CYAN}${EXPLORER}/address/${REBASE_EXECUTOR}${RESET}\n"
+if [[ -n "$ALERT_REGISTRY" ]]; then
+  printf "  AlertRegistry:  ${CYAN}${EXPLORER}/address/${ALERT_REGISTRY}${RESET}\n"
+fi
+printf "  TokenPool:      ${CYAN}${EXPLORER}/address/${TOKEN_POOL}${RESET}\n"
+printf "  HubPeer:        ${CYAN}${EXPLORER}/address/${HUB_PEER}${RESET}\n"
 printf "  ${DIM}──────────────────────────────────────────────────────────────────${RESET}\n\n"
 
 printf "  ${BOLD}${WHITE}Transaction Log${RESET}\n"
@@ -501,9 +612,13 @@ printf "  ${GOLD}3.${RESET} Emergency Pause   ${CYAN}${EXPLORER}/tx/${TX_W2}${RE
 printf "  ${GOLD}4.${RESET} Fund Rescue       ${CYAN}${EXPLORER}/tx/${TX_W3}${RESET}\n"
 printf "  ${DIM}──────────────────────────────────────────────────────────────────${RESET}\n\n"
 
+TX_COUNT=4
+if [[ -n "$ALERT_REGISTRY" ]]; then
+  TX_COUNT=5
+fi
 printf "  ${DIM}Total demo time: ${WHITE}$(format_elapsed $DEMO_ELAPSED)${RESET} │ "
-printf "${DIM}Transactions: ${WHITE}4 confirmed${RESET} │ "
-printf "${DIM}Network: ${WHITE}Sepolia${RESET}\n\n"
+printf "${DIM}Transactions: ${WHITE}${TX_COUNT} confirmed${RESET} │ "
+printf "${DIM}Network: ${WHITE}${CHAIN_LABEL}${RESET}\n\n"
 
 printf "  ${GOLD}${BOLD}══════════════════════════════════════════════════════════════════${RESET}\n"
 type_line "  DEMONSTRATION COMPLETE." "$WHITE"

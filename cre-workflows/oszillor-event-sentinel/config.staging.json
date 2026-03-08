@@ -5,8 +5,8 @@
     "simulateThreat":  true,
     "evms":  [
                  {
-                     "chainName":  "ethereum-testnet-sepolia",
-                     "eventSentinelAddress":  "0x0490c9a22e1dc8084fe18f8977a81bb42e5b341f",
+                     "chainName":  "ethereum-testnet-sepolia-base-1",
+                     "eventSentinelAddress":  "0x424FB4395a95153802B3A4c1cfb2514B0aBF8732",
                      "gasLimit":  "500000"
                  }
              ]

@@ -13,6 +13,7 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "framer-motion": "^11.18.0",
     "thirdweb": "^5.119.1"
   },
   "devDependencies": {

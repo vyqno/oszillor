@@ -4,6 +4,7 @@
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=375BD2&center=true&vCenter=true&width=800&lines=Risk-managed+ETH+yield+vault;Autonomous+AI-driven+incident+response;Powered+by+Chainlink+CRE%2C+CCIP%2C+and+Price+Feeds" alt="Typing SVG" />
 </p>
 
+[![Base](https://img.shields.io/badge/Network-Base_Sepolia-0052FF?style=for-the-badge&logo=coinbase&logoColor=white)](https://sepolia.basescan.org/)
 [![Ethereum](https://img.shields.io/badge/Network-Ethereum_Sepolia-627EEA?style=for-the-badge&logo=ethereum&logoColor=white)](https://sepolia.etherscan.io/)
 [![Chainlink](https://img.shields.io/badge/Powered_by-Chainlink-375BD2?style=for-the-badge&logo=chainlink&logoColor=white)](https://chain.link/)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
@@ -15,7 +16,7 @@
 
 Users deposit ETH to earn Lido staking yield. When markets crash, the protocol detects the threat via AI, pauses itself, and rescues funds — without human intervention.
 
-> **Source Code**: [github.com/vyqno/oszillor](https://github.com/vyqno/oszillor) | **Network**: Ethereum Sepolia | **Demo**: [`demo/e2e-master.sh`](./demo/e2e-master.sh) (live on-chain transactions)
+> **Source Code**: [github.com/vyqno/oszillor](https://github.com/vyqno/oszillor) | **Networks**: Base Sepolia + Ethereum Sepolia | **Demo**: [`demo/e2e-master.sh`](./demo/e2e-master.sh) (live on-chain transactions)
 
 ## 📖 Table of Contents
 
@@ -39,6 +40,10 @@ Users deposit ETH to earn Lido staking yield. When markets crash, the protocol d
   - [W2 — Event Sentinel](#w2--event-sentinel)
   - [W3 — Rebase Executor](#w3--rebase-executor)
   - [CRE Capability Matrix](#cre-capability-matrix)
+- [💰 x402 Risk Intelligence API](#-x402-risk-intelligence-api)
+  - [W4 — Risk Alerts](#w4--risk-alerts)
+  - [API Endpoints](#api-endpoints)
+  - [AI Agent (Coinbase AgentKit)](#ai-agent-coinbase-agentkit)
 - [🧠 AI Integration](#-ai-integration)
 - [🔒 Privacy Integration](#-privacy-integration)
 - [🌉 Cross-Chain Architecture (CCIP)](#-cross-chain-architecture-ccip)
@@ -240,8 +245,8 @@ OSZILLOR uses a 6-layer modular architecture:
   │                       OszillorToken                     │
   ├────────────────────────────────────────────────────────┤
   │  Layer 3: Modules     RiskEngine, EventSentinel,        │
-  │                       RebaseExecutor, CREReceiver,      │
-  │                       OszillorFees                      │
+  │                       RebaseExecutor, AlertRegistry,    │
+  │                       CREReceiver, OszillorFees         │
   ├────────────────────────────────────────────────────────┤
   │  Layer 2: Interfaces  IOszillorVault, IVaultStrategy,   │
   │                       IRiskAdapter, IERC677Receiver     │
@@ -323,7 +328,7 @@ When vault NAV changes, `rebaseIndex` is adjusted — all holder balances update
 ```
                     ┌─────────────┐
                     │   HubPeer   │
-                    │  (Sepolia)  │
+                    │(Base Sepolia│
                     └──┬──────┬───┘
               CCIP     │      │     CCIP
            ┌───────────┘      └───────────┐
@@ -519,17 +524,165 @@ Reads on-chain state, computes optimal portfolio allocation, and triggers rebala
 
 ### CRE Capability Matrix
 
-| Capability | W1 | W2 | W3 | Purpose |
-| --- | --- | --- | --- | --- |
-| Cron Trigger | 30s | 15s | 5m | Scheduled execution |
-| HTTPClient | CoinGecko, DefiLlama (x2) | CoinGecko | — | Market data |
-| ConfidentialHTTPClient | News API | — | — | Private credential access |
-| HTTPClient → LLM | Groq API | — | — | AI risk reasoning |
-| Compute | Risk scoring | Threat detection | Rebalance math | Bigint arithmetic |
-| DON Consensus (median) | Risk score | Threat level | Rebalance params | Node agreement |
-| DON Consensus (common-prefix) | AI reasoning | — | — | Text agreement |
-| EVM Read | — | — | Vault + Strategy state | On-chain data |
-| EVM Write | RiskEngine | EventSentinel | RebaseExecutor | On-chain reports |
+| Capability | W1 | W2 | W3 | W4 | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| Cron Trigger | 30s | 15s | 5m | 60s | Scheduled execution |
+| HTTP Trigger | — | — | — | Alert creation | On-demand via x402 API |
+| HTTPClient | CoinGecko, DefiLlama (x2) | CoinGecko | — | — | Market data |
+| ConfidentialHTTPClient | News API | — | — | — | Private credential access |
+| HTTPClient → LLM | Groq API | — | — | — | AI risk reasoning |
+| Compute | Risk scoring | Threat detection | Rebalance math | Alert evaluation | Bigint arithmetic |
+| DON Consensus (median) | Risk score | Threat level | Rebalance params | — | Node agreement |
+| DON Consensus (common-prefix) | AI reasoning | — | — | — | Text agreement |
+| EVM Read | — | — | Vault + Strategy | **Cross-chain** (2 chains) | On-chain data |
+| EVM Write | RiskEngine | EventSentinel | RebaseExecutor | AlertRegistry | On-chain reports |
+
+## 💰 x402 Risk Intelligence API
+
+OSZILLOR monetizes its risk data as a paid API. AI agents, DeFi protocols, and traders pay USDC micropayments via the **x402 HTTP payment protocol** to access real-time risk intelligence — creating protocol revenue from data that already exists on-chain.
+
+```
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │                     x402 PAYMENT FLOW                               │
+  │                                                                     │
+  │  AI Agent ──► GET /v1/risk/current ──► 402 Payment Required         │
+  │     │                                       │                       │
+  │     │         ┌─────────────────────┐       │ price: $0.001 USDC    │
+  │     └────────►│  x402 Client        │◄──────┘ network: Base Sepolia │
+  │               │  (auto-signs USDC   │                               │
+  │               │   payment header)   │                               │
+  │               └─────────┬───────────┘                               │
+  │                         │                                           │
+  │                         ▼                                           │
+  │               ┌─────────────────────┐                               │
+  │               │  Facilitator        │  Verifies payment on-chain    │
+  │               │  (Coinbase x402)    │  Settles USDC to payTo addr   │
+  │               └─────────┬───────────┘                               │
+  │                         │                                           │
+  │                         ▼                                           │
+  │               ┌─────────────────────┐                               │
+  │               │  Risk API Server    │  Reads vault state via viem   │
+  │               │  (Express + x402)   │  from Ethereum Sepolia        │
+  │               └─────────┬───────────┘                               │
+  │                         │                                           │
+  │                         ▼                                           │
+  │               { riskScore: 72, riskLevel: "DANGER", ... }           │
+  └─────────────────────────────────────────────────────────────────────┘
+```
+
+### W4 — Risk Alerts
+
+[`cre-workflows/oszillor-risk-alerts/main.ts`](./cre-workflows/oszillor-risk-alerts/main.ts) | HTTP trigger + Cron: every 60 seconds
+
+A dual-trigger CRE workflow that manages alert subscriptions. The HTTP trigger receives new alert rules from the x402 API server and writes them to the `AlertRegistry` on-chain. The cron trigger evaluates active rules against live risk data — performing **cross-chain EVM reads** from both Base Sepolia (AlertRegistry) and Ethereum Sepolia (OszillorVault).
+
+```
+  POST /v1/alerts ($0.01 USDC)
+         │
+         ▼
+  ┌──────────────────┐     ┌─────────────────────┐
+  │  Express Server  │────►│  CRE W4 HTTP Trigger │
+  │  (x402-gated)    │     │                      │
+  └──────────────────┘     │  ABI-encode alert    │
+                           │  runtime.report()    │
+                           │  writeReport() ──────┼──► AlertRegistry (Base Sepolia)
+                           └──────────────────────┘
+
+  Every 60s:
+  ┌─────────────────────────────────────────────────────────────┐
+  │  CRE W4 Cron Trigger                                        │
+  │                                                             │
+  │  EVM Read (Base Sepolia)                                    │
+  │    AlertRegistry.getAllRuleIds()                             │
+  │    AlertRegistry.isRuleActive(id)                           │
+  │    AlertRegistry.getRule(id)                                │
+  │                                                             │
+  │  EVM Read (Eth Sepolia)  ◄── cross-chain!                  │
+  │    OszillorVault.currentRiskScore()                         │
+  │    OszillorVault.emergencyMode()                            │
+  │                                                             │
+  │  Compute: evaluate each rule against live state             │
+  │    RISK_ABOVE 70? riskScore = 72 → TRIGGERED               │
+  └─────────────────────────────────────────────────────────────┘
+```
+
+[`contracts/src/modules/AlertRegistry.sol`](./contracts/src/modules/AlertRegistry.sol) — CRE receiver on Base Sepolia that stores alert subscriptions. Supports `RISK_ABOVE`, `RISK_BELOW`, and `EMERGENCY` conditions with configurable thresholds and TTL-based expiry.
+
+### API Endpoints
+
+[`risk-api/src/server.ts`](./risk-api/src/server.ts) — Express server with `@x402/express` payment middleware.
+
+| Method | Path | x402 Price | Returns |
+|--------|------|-----------|---------|
+| GET | `/health` | Free | Uptime, server status |
+| GET | `/v1/risk/current` | $0.001 USDC | riskScore, riskLevel, confidence, timestamp |
+| GET | `/v1/risk/portfolio` | $0.005 USDC | NAV, ETH/USDC allocation, strategy positions |
+| GET | `/v1/risk/full` | $0.01 USDC | Combined risk + portfolio + allocations |
+| POST | `/v1/alerts` | $0.01 USDC | Create alert subscription via CRE W4 |
+| GET | `/v1/alerts/:id` | $0.001 USDC | Alert subscription status |
+
+```bash
+# Start the API server
+cd risk-api && bun run dev
+
+# Test (free endpoint)
+curl http://localhost:4021/health
+
+# Test (x402-gated — returns 402 without payment)
+curl http://localhost:4021/v1/risk/current
+```
+
+### AI Agent (Coinbase AgentKit)
+
+[`risk-api/agent/`](./risk-api/agent/) — A real autonomous AI agent built with **Coinbase AgentKit + LangChain + Claude Sonnet** that consumes the x402 Risk API. The agent has a CDP-managed wallet on Base Sepolia and autonomously pays for risk intelligence data.
+
+```
+  ┌───────────────────────────────────────────────────────────────────┐
+  │                    AUTONOMOUS RISK AGENT                          │
+  │                                                                   │
+  │  ┌────────────────┐    ┌─────────────────┐    ┌───────────────┐  │
+  │  │  Claude Sonnet LLM    │───►│  LangChain      │───►│  AgentKit     │  │
+  │  │  (reasoning)   │    │  ReAct Agent     │    │  Tools        │  │
+  │  └────────────────┘    └─────────────────┘    └───────┬───────┘  │
+  │                                                       │          │
+  │                                          ┌────────────┼──────┐   │
+  │                                          │            │      │   │
+  │                                          ▼            ▼      ▼   │
+  │                                    ┌──────────┐ ┌────────┐ ┌───┐ │
+  │                                    │  x402    │ │ Wallet │ │ERC│ │
+  │                                    │  Action  │ │ Action │ │20 │ │
+  │                                    │ Provider │ │Provider│ │   │ │
+  │                                    └────┬─────┘ └────────┘ └───┘ │
+  │                                         │                        │
+  │                            ┌────────────┴────────────┐           │
+  │                            ▼                         ▼           │
+  │                     GET /v1/risk/current      POST /v1/alerts    │
+  │                     → 402 → auto-pay USDC     → 402 → auto-pay  │
+  │                     → risk data returned      → alert created    │
+  └───────────────────────────────────────────────────────────────────┘
+```
+
+Two modes:
+- **Interactive Chat** (`bun run start`) — Ask questions, agent fetches and pays for data on demand
+- **Autonomous** (`bun run auto`) — Agent runs full risk monitoring cycle independently, escalating based on risk level
+
+```bash
+# Setup
+cd risk-api/agent
+cp .env.example .env  # Fill in ANTHROPIC_API_KEY + CDP credentials
+bun install
+
+# Interactive mode
+bun run start
+# "Check the current ETH risk level"
+# "Get the full portfolio report"
+# "Create an alert if risk goes above 70"
+
+# Autonomous mode
+bun run auto
+```
+
+There is also a lightweight demo without an LLM at [`risk-api/demo/agent-demo.ts`](./risk-api/demo/agent-demo.ts) that uses `@x402/fetch` for direct x402 auto-payment ($0.026 USDC total).
 
 ## 🧠 AI Integration
 
@@ -559,7 +712,7 @@ OSZILLOR uses a hub-spoke CCIP topology for cross-chain OSZ token bridging and r
 ```
                            ┌──────────────────────┐
                            │     Hub Chain         │
-                           │     (Sepolia)         │
+                           │  (Base Sepolia)       │
                            │                       │
                            │  OszillorVault        │
                            │  VaultStrategy        │
@@ -631,7 +784,7 @@ When W3 triggers a rebalance, the vault adjusts the strategy's ETH/USDC split:
 
 ## 🧪 Testing
 
-**265 tests** across 10 suites. **Zero failures**. 4,877 lines of test code against 3,523 lines of source (1.38x ratio).
+**305 tests** across 12 suites. **Zero failures**.
 
 | Suite | Tests | Type |
 | --- | --- | --- |
@@ -640,6 +793,7 @@ When W3 triggers a rebalance, the vault adjusts the strategy's ETH/USDC split:
 | OszillorTokenTest | 41 | Unit |
 | VaultStrategyTest | 32 | Unit |
 | LibrariesTest | 32 | Unit (ShareMath, RiskMath, CCIPOperations) |
+| AlertRegistryTest | 20 | Unit (CRE 4-check, TTL expiry, USDC withdrawal) |
 | OszillorTokenPoolTest | 18 | Unit |
 | PeersTest | 13 | Unit (HubPeer, SpokePeer) |
 | OszillorInvariantTest | 7 | Invariant (handler-based, fail-on-revert) |
@@ -653,7 +807,7 @@ Key invariants tested:
 - Strategy value + vault idle = total NAV
 
 ```bash
-forge test               # All 265 tests
+forge test               # All 305 tests
 forge test -vvv          # Verbose
 forge test --match-contract OszillorInvariantTest   # Invariant suite
 ```
@@ -682,44 +836,67 @@ A comprehensive security audit identified 36 findings across severity levels. Al
 
 ## 🌐 Testnet Deployment
 
-Hub deployed to Ethereum Sepolia. All contracts verified on Etherscan.
+Deployed to **two chains** — full hub on Base Sepolia (primary) and Ethereum Sepolia. All contracts live with on-chain bytecode verified via `cast code`.
 
-| Contract | Address | Etherscan |
+### Base Sepolia (Primary Hub)
+
+| Contract | Address | Explorer |
 | --- | --- | --- |
-| OszillorVault | `0xbb6b...f1d` | [View](https://sepolia.etherscan.io/address/0xbb6b66c2bd6c3e53869726f1eadc8cf824f8ff1d#code) |
-| VaultStrategy | `0xdf6e...ccf` | [View](https://sepolia.etherscan.io/address/0xdf6e5ebcaaff2a2a40c4a3e6b89e936a13747ccf#code) |
-| OszillorToken | `0xd171...30a` | [View](https://sepolia.etherscan.io/address/0xd17107316431bc9626bad4d25f584fae5df1630a#code) |
-| RiskEngine | `0x31b3...b0` | [View](https://sepolia.etherscan.io/address/0x31b3cfb370de8b7b13bda40f105901ad7a68ebb0#code) |
-| EventSentinel | `0x0490...1f` | [View](https://sepolia.etherscan.io/address/0x0490c9a22e1dc8084fe18f8977a81bb42e5b341f#code) |
-| RebaseExecutor | `0xeaa6...51` | [View](https://sepolia.etherscan.io/address/0xeaa638afeb35d2020907856a8a4d5d092037d851#code) |
-| MockLido | `0x02bd...eb` | [View](https://sepolia.etherscan.io/address/0x02bdfd4659386db44846cb0a04634b823bf8bbeb#code) |
-| OszillorTokenPool | `0x0314...62` | [View](https://sepolia.etherscan.io/address/0x031499719b6cdc5705ab1628bc3eea6b98a90a62#code) |
-| HubPeer | `0xf42a...df` | [View](https://sepolia.etherscan.io/address/0xf42a60dd901b94223305f5fa7051960d8c09dbdf#code) |
+| OszillorVault | `0xa120B2d1acdc17FbB6C49BD222C05D74e1b0691d` | [View](https://sepolia.basescan.org/address/0xa120B2d1acdc17FbB6C49BD222C05D74e1b0691d) |
+| OszillorToken | `0x86fFd6Bd8F9c6E89B7E5D7e310E6D0057fF560E0` | [View](https://sepolia.basescan.org/address/0x86fFd6Bd8F9c6E89B7E5D7e310E6D0057fF560E0) |
+| VaultStrategy | `0x495BAD77D91afA0fc03Fe24A0C074966d2e34A96` | [View](https://sepolia.basescan.org/address/0x495BAD77D91afA0fc03Fe24A0C074966d2e34A96) |
+| RiskEngine | `0x69A213a7BcB23d8693f558bAcD6192F5605BEFAD` | [View](https://sepolia.basescan.org/address/0x69A213a7BcB23d8693f558bAcD6192F5605BEFAD) |
+| EventSentinel | `0x424FB4395a95153802B3A4c1cfb2514B0aBF8732` | [View](https://sepolia.basescan.org/address/0x424FB4395a95153802B3A4c1cfb2514B0aBF8732) |
+| RebaseExecutor | `0x35Bf9dE18C872Ae9B5E1B55425390ADef31514DC` | [View](https://sepolia.basescan.org/address/0x35Bf9dE18C872Ae9B5E1B55425390ADef31514DC) |
+| AlertRegistry | `0x62998075686658C6069de79A05461Aed91663265` | [View](https://sepolia.basescan.org/address/0x62998075686658C6069de79A05461Aed91663265) |
+| OszillorTokenPool | `0x63F47EFc17183CB30bd72D3ecA3122850d1084A7` | [View](https://sepolia.basescan.org/address/0x63F47EFc17183CB30bd72D3ecA3122850d1084A7) |
+| HubPeer | `0x9269Da439a4fBc2601E4f5BC4A9AEeD292319008` | [View](https://sepolia.basescan.org/address/0x9269Da439a4fBc2601E4f5BC4A9AEeD292319008) |
+| MockLido | `0x800527792FDeC4aEb8B4fd510C669dacA4e7309D` | [View](https://sepolia.basescan.org/address/0x800527792FDeC4aEb8B4fd510C669dacA4e7309D) |
 
-Deployed with [`DeployHub.s.sol`](./contracts/script/deploy/DeployHub.s.sol). Roles granted with [`SetupRoles.s.sol`](./contracts/script/deploy/SetupRoles.s.sol). Validated with [`ValidateDeployment.s.sol`](./contracts/script/interactions/ValidateDeployment.s.sol).
+### Ethereum Sepolia (Secondary Hub)
+
+| Contract | Address | Explorer |
+| --- | --- | --- |
+| OszillorVault | `0xbb6b66c2bd6c3e53869726f1eadc8cf824f8ff1d` | [View](https://sepolia.etherscan.io/address/0xbb6b66c2bd6c3e53869726f1eadc8cf824f8ff1d#code) |
+| OszillorToken | `0xd17107316431bc9626bad4d25f584fae5df1630a` | [View](https://sepolia.etherscan.io/address/0xd17107316431bc9626bad4d25f584fae5df1630a#code) |
+| VaultStrategy | `0xdf6e5ebcaaff2a2a40c4a3e6b89e936a13747ccf` | [View](https://sepolia.etherscan.io/address/0xdf6e5ebcaaff2a2a40c4a3e6b89e936a13747ccf#code) |
+| RiskEngine | `0x31b3cfb370de8b7b13bda40f105901ad7a68ebb0` | [View](https://sepolia.etherscan.io/address/0x31b3cfb370de8b7b13bda40f105901ad7a68ebb0#code) |
+| EventSentinel | `0x0490c9a22e1dc8084fe18f8977a81bb42e5b341f` | [View](https://sepolia.etherscan.io/address/0x0490c9a22e1dc8084fe18f8977a81bb42e5b341f#code) |
+| RebaseExecutor | `0xeaa638afeb35d2020907856a8a4d5d092037d851` | [View](https://sepolia.etherscan.io/address/0xeaa638afeb35d2020907856a8a4d5d092037d851#code) |
+| MockLido | `0x02bdfd4659386db44846cb0a04634b823bf8bbeb` | [View](https://sepolia.etherscan.io/address/0x02bdfd4659386db44846cb0a04634b823bf8bbeb#code) |
+| OszillorTokenPool | `0x031499719b6cdc5705ab1628bc3eea6b98a90a62` | [View](https://sepolia.etherscan.io/address/0x031499719b6cdc5705ab1628bc3eea6b98a90a62#code) |
+| HubPeer | `0xf42a60dd901b94223305f5fa7051960d8c09dbdf` | [View](https://sepolia.etherscan.io/address/0xf42a60dd901b94223305f5fa7051960d8c09dbdf#code) |
+
+Deployed with [`DeployHub.s.sol`](./contracts/script/deploy/DeployHub.s.sol). AlertRegistry deployed with [`DeployAlertRegistry.s.sol`](./contracts/script/deploy/DeployAlertRegistry.s.sol). Roles granted with [`SetupRoles.s.sol`](./contracts/script/interactions/SetupRoles.s.sol). Validated with [`ValidateDeployment.s.sol`](./contracts/script/interactions/ValidateDeployment.s.sol).
 
 ## 🎬 E2E Demo
 
-The demo script runs a full incident response scenario on Sepolia with real on-chain transactions. Every CRE workflow writes a verifiable transaction on-chain.
+The demo script runs a full incident response scenario with real on-chain transactions. Supports both Base Sepolia (default) and Ethereum Sepolia. Every CRE workflow writes a verifiable transaction on-chain.
 
-1. **Deposit** — User deposits WETH, funds routed to strategy, OSZ minted (1 tx)
-2. **Market crash** — Simulated Lido stETH depeg/exploit
-3. **W1 Risk Scanner** — AI diagnosis via Groq LLM, risk report written to RiskEngine (1 tx)
-4. **W2 Event Sentinel** — Crash detection, threat report written to EventSentinel (1 tx)
-5. **W3 Rebase Executor** — Rebalance + rebase report written to RebaseExecutor (1 tx)
-6. **Verification** — Before/after balance diffs, all 4 Etherscan tx links
+| Step | What Happens | On-chain TX |
+| --- | --- | --- |
+| **Step 0** | Seed risk state (ensures vault accepts deposits) | 1 tx |
+| **Step 1** | User deposits WETH, funds routed to strategy, OSZ minted | 1 tx |
+| **Step 2** | Simulated Lido stETH depeg/exploit (rocket crash animation) | — |
+| **Step 3** | W1 Risk Scanner — live Groq LLM diagnosis, risk report to RiskEngine | 1 tx |
+| **Step 4** | W2 Event Sentinel — crash detection, emergency pause to EventSentinel | 1 tx |
+| **Step 5** | W3 Rebase Executor — fund rescue, rebalance report to RebaseExecutor | 1 tx |
+| **Step 6** | W4 Risk Alerts — cross-chain alert evaluation (Base Sepolia only) | — |
+| **Step 7** | Final verification — before/after balance diffs, all tx links | — |
 
 ```
-  Transaction Log
-  ──────────────────────────────────────────────────────────────────
-  1. User Deposit      https://sepolia.etherscan.io/tx/0x9b3723c7...
-  2. AI Risk Report    https://sepolia.etherscan.io/tx/0x08639e02...
-  3. Emergency Pause   https://sepolia.etherscan.io/tx/0xc5b8561c...
-  4. Fund Rescue       https://sepolia.etherscan.io/tx/0xc6dbd74d...
+  PROOF OF EXECUTION — BASE SEPOLIA LIVE TRANSACTIONS
+  ══════════════════════════════════════════════════════════════════
+  1. User Deposit      https://sepolia.basescan.org/tx/0x...
+  2. AI Risk Report    https://sepolia.basescan.org/tx/0x93bbfac4...
+  3. Emergency Pause   https://sepolia.basescan.org/tx/0x49c967ee...
+  4. Fund Rescue       https://sepolia.basescan.org/tx/0x9ba4f337...
 ```
 
 ```bash
-bash demo/e2e-master.sh
+make demo-e2e                              # Base Sepolia (default)
+make demo-e2e-sepolia                      # Ethereum Sepolia
+bash demo/e2e-master.sh --chain base-sepolia  # Direct invocation
 ```
 
 ## 🔗 Chainlink File References
@@ -740,39 +917,96 @@ Files that use Chainlink services:
 | [`cre-workflows/oszillor-risk-scanner/main.ts`](./cre-workflows/oszillor-risk-scanner/main.ts) | CRE (HTTPClient, ConfidentialHTTPClient, Consensus, EVM Write) |
 | [`cre-workflows/oszillor-event-sentinel/main.ts`](./cre-workflows/oszillor-event-sentinel/main.ts) | CRE (HTTPClient, Consensus, EVM Write) |
 | [`cre-workflows/oszillor-rebase-executor/main.ts`](./cre-workflows/oszillor-rebase-executor/main.ts) | CRE (EVM Read, Consensus, EVM Write) |
+| [`src/modules/AlertRegistry.sol`](./contracts/src/modules/AlertRegistry.sol) | CRE (W4 report receiver) |
+| [`cre-workflows/oszillor-risk-alerts/main.ts`](./cre-workflows/oszillor-risk-alerts/main.ts) | CRE (HTTP Trigger, Cron, cross-chain EVM Read, EVM Write) |
+| [`risk-api/src/server.ts`](./risk-api/src/server.ts) | x402 (payment middleware, Base Sepolia USDC) |
 
 ## 💻 Local Development
 
 ### Prerequisites
 
 - [Foundry](https://getfoundry.sh/) (`forge`, `cast`)
-- [Bun](https://bun.sh/) (CRE workflow tests)
-- Node.js 18+
-- [CRE CLI](https://docs.chain.link/cre)
+- [Bun](https://bun.sh/) (CRE workflows, Risk API, Agent, Frontend)
+- [CRE CLI](https://docs.chain.link/cre) (`cre workflow simulate`)
+- GNU Make (included on macOS/Linux, use Git Bash on Windows)
 
-### Build and Test
+### Quick Start
 
 ```bash
-cd contracts
-forge build       # Compile (zero errors)
-forge test        # Run all 265 tests
+make                  # Show all available commands
+make install-all      # Install ALL dependencies (Foundry + CRE + API + Agent + Frontend)
+make test-all         # Run ALL tests (305 Foundry + 4 CRE simulations)
+make showcase         # Full project showcase for reviewers
 ```
 
-### Deploy
+### Makefile Commands
+
+| Category | Command | Description |
+|----------|---------|-------------|
+| **Setup** | `make setup` | Install Foundry deps + create deployer keystore |
+| | `make install-all` | Install ALL project dependencies |
+| **Build** | `make build` | Compile all Solidity contracts |
+| | `make build-cre` | Compile all 4 CRE workflows to WASM |
+| | `make build-all` | Build everything (Solidity + CRE WASM) |
+| **Test** | `make test` | Run all 305 Solidity tests |
+| | `make test-summary` | Run tests with per-suite summary table |
+| | `make test-unit` | Unit tests only |
+| | `make test-fuzz` | Fuzz tests only (10,000 runs each) |
+| | `make test-invariant` | Invariant tests (stateful fuzzing) |
+| | `make test-integration` | CRE integration tests |
+| | `make test-gas` | Tests with gas report |
+| | `make test-all` | ALL tests (Foundry + CRE W1-W4) |
+| **CRE** | `make simulate-w1` | Simulate W1 Risk Scanner |
+| | `make simulate-w2` | Simulate W2 Event Sentinel |
+| | `make simulate-w3` | Simulate W3 Rebase Executor |
+| | `make simulate-w4-cron` | Simulate W4 Alerts (cron trigger) |
+| | `make simulate-w4-http` | Simulate W4 Alerts (HTTP trigger) |
+| | `make simulate-all` | Simulate all 4 workflows |
+| **API** | `make api-dev` | Start Risk API with hot reload (port 4021) |
+| | `make api-test` | Test all 6 API endpoints |
+| | `make api-demo` | Run x402 payment demo |
+| **Agent** | `make agent-chat` | Interactive AI agent (Claude + AgentKit) |
+| | `make agent-auto` | Autonomous risk monitoring agent |
+| **Frontend** | `make frontend-dev` | Start Next.js dev server (port 3000) |
+| | `make frontend-build` | Build frontend for production |
+| **Deploy** | `make deploy-base` | Deploy all contracts to Base Sepolia |
+| | `make deploy-hub` | Deploy hub to Ethereum Sepolia |
+| | `make deploy-alerts` | Deploy AlertRegistry to Base Sepolia |
+| | `make deploy-all` | Full pipeline: deploy + roles + validate |
+| **Demo** | `make showcase` | Full project showcase (tests + simulations) |
+| | `make demo-e2e` | Run E2E demo on Base Sepolia (live txs) |
+| | `make demo-e2e-sepolia` | Run E2E demo on Ethereum Sepolia |
+| **Utils** | `make status` | Show project health (git, builds, deps) |
+| | `make sizes` | Show contract deployment sizes |
+| | `make fmt` | Format Solidity files |
+
+### Environment Setup
 
 ```bash
-forge script script/deploy/DeployHub.s.sol --broadcast --account deployer --rpc-url $SEPOLIA_RPC_URL
-forge script script/deploy/SetupRoles.s.sol --broadcast --account deployer --rpc-url $SEPOLIA_RPC_URL
-forge script script/interactions/ValidateDeployment.s.sol --rpc-url $SEPOLIA_RPC_URL
+# Solidity contracts
+cd contracts && cp .env.example .env     # Fill: DEPLOYER_ADDRESS, RPC URLs
+
+# Risk API server
+cd risk-api && cp .env.example .env      # Fill: PAY_TO_ADDRESS, RPC URL
+
+# AI Agent
+cd risk-api/agent && cp .env.example .env  # Fill: ANTHROPIC_API_KEY, CDP credentials
 ```
 
-### Simulate CRE Workflows
+### Run Everything
 
 ```bash
-cd cre-workflows
-cre workflow simulate ./oszillor-risk-scanner --target staging-settings
-cre workflow simulate ./oszillor-event-sentinel --target staging-settings
-cre workflow simulate ./oszillor-rebase-executor --target staging-settings
+# Terminal 1: Risk API server
+make api-dev
+
+# Terminal 2: Test the API
+make api-test
+
+# Terminal 3: AI Agent (interactive)
+make agent-chat
+
+# Terminal 4: Frontend
+make frontend-dev
 ```
 
 ## 🖥️ Frontend
@@ -796,7 +1030,7 @@ contracts/
     peers/                      #   HubPeer, SpokePeer, OszillorPeer
     libraries/                  #   ShareMath, RiskMath, CCIPOperations, Roles, Errors
     interfaces/                 #   All contract interfaces
-  test/                         # 4,877 lines — 265 tests
+  test/                         # 305 tests
     unit/                       #   Per-contract unit tests
     fuzz/                       #   Property-based fuzz tests (10k runs)
     invariant/                  #   Handler-based invariant tests
@@ -809,8 +1043,18 @@ cre-workflows/
   oszillor-risk-scanner/        # W1: multi-signal risk + AI + yields
   oszillor-event-sentinel/      # W2: crash detection + emergency pause
   oszillor-rebase-executor/     # W3: portfolio rebalance + rebase
+  oszillor-risk-alerts/         # W4: alert subscriptions (HTTP + Cron, cross-chain)
   contracts/abi/                # Shared ABIs for EVM read/write
   tests/                        # Encoding + risk-math tests
+
+risk-api/
+  src/                          # Express server + x402 payment middleware
+    routes/                     #   health (free), risk (3), alerts (2)
+    services/                   #   vault-reader (viem), risk-formatter
+  agent/                        # Coinbase AgentKit + LangChain + Claude Sonnet
+    chatbot.ts                  #   Interactive chat mode
+    autonomous.ts               #   Autonomous risk monitoring
+  demo/                         # Lightweight x402-fetch demo script
 
 demo/
   e2e-master.sh                 # Full E2E demo with live Sepolia txs

@@ -36,4 +36,9 @@ library Roles {
 
     /// @notice Granted to OszillorVault — sole authority to call VaultStrategy.rebalance().
     bytes32 internal constant STRATEGY_MANAGER_ROLE = keccak256("STRATEGY_MANAGER_ROLE");
+
+    /// @notice Granted to OszillorVault — authority to mint/burn shares on OszillorToken.
+    /// @dev Separated from RISK_MANAGER_ROLE (HIGH-NEW-01 fix) so the vault does not
+    ///      hold RISK_MANAGER_ROLE on itself, preventing bypass of RiskEngine checks.
+    bytes32 internal constant TOKEN_MINTER_ROLE = keccak256("TOKEN_MINTER_ROLE");
 }

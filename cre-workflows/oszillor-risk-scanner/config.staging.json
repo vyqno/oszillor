@@ -14,9 +14,9 @@
     "newsSecretOwner":  "",
     "evms":  [
                  {
-                     "chainName":  "ethereum-testnet-sepolia",
-                     "riskEngineAddress":  "0x31b3cfb370de8b7b13bda40f105901ad7a68ebb0",
-                     "ethUsdFeedAddress":  "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+                     "chainName":  "ethereum-testnet-sepolia-base-1",
+                     "riskEngineAddress":  "0x69A213a7BcB23d8693f558bAcD6192F5605BEFAD",
+                     "ethUsdFeedAddress":  "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1",
                      "gasLimit":  "500000"
                  }
              ]

@@ -103,8 +103,10 @@ contract OszillorToken is ERC20, AccessControlDefaultAdminRules, ReentrancyGuard
     /// @notice Approves spender for a rebased amount (stored internally as shares).
     /// @dev HIGH-01 fix: amount is converted to shares before storage, so allowance
     ///      adjusts automatically with rebases.
+    ///      HIGH-NEW-05 fix: Uses Ceil rounding so allowance() never returns less
+    ///      than the approved amount after the shares→amount roundtrip.
     function approve(address spender, uint256 amount) public override(ERC20) returns (bool) {
-        uint256 shareAmount = _amountToShares(amount);
+        uint256 shareAmount = ShareMath.amountToSharesByIndexCeil(amount, _rebaseIndex);
         _shareAllowances[msg.sender][spender] = shareAmount;
         emit Approval(msg.sender, spender, amount);
         return true;
@@ -148,7 +150,9 @@ contract OszillorToken is ERC20, AccessControlDefaultAdminRules, ReentrancyGuard
     // ══════════════════════════════════════════════════════════════
 
     /// @inheritdoc IOszillorToken
-    function mintShares(address to, uint256 shares) external onlyRole(Roles.RISK_MANAGER_ROLE) {
+    /// @dev HIGH-NEW-01 fix: Uses TOKEN_MINTER_ROLE (not RISK_MANAGER_ROLE) so vault
+    ///      doesn't need RISK_MANAGER_ROLE on itself, preventing check bypass.
+    function mintShares(address to, uint256 shares) external onlyRole(Roles.TOKEN_MINTER_ROLE) {
         if (to == address(0)) revert OszillorErrors.ZeroAddress();
         if (shares == 0) revert OszillorErrors.ZeroAmount();
 
@@ -161,7 +165,7 @@ contract OszillorToken is ERC20, AccessControlDefaultAdminRules, ReentrancyGuard
     }
 
     /// @inheritdoc IOszillorToken
-    function burnShares(address from, uint256 shares) external onlyRole(Roles.RISK_MANAGER_ROLE) {
+    function burnShares(address from, uint256 shares) external onlyRole(Roles.TOKEN_MINTER_ROLE) {
         if (from == address(0)) revert OszillorErrors.ZeroAddress();
         if (shares == 0) revert OszillorErrors.ZeroAmount();
         if (_shares[from] < shares) {
