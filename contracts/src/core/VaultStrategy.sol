@@ -34,6 +34,9 @@ contract VaultStrategy is IVaultStrategy, AccessControl {
     /// @notice Maximum staleness for the Chainlink price feed (1 hour).
     uint256 public constant MAX_FEED_STALENESS = 1 hours;
 
+    /// @notice Maximum swap deadline offset from block.timestamp (HIGH-NEW-02 fix).
+    uint256 public constant SWAP_DEADLINE_OFFSET = 300; // 5 minutes
+
     /// @notice Uniswap V3 pool fee tier for WETH/USDC (0.3%).
     uint24 public constant POOL_FEE = 3000;
 
@@ -89,8 +92,10 @@ contract VaultStrategy is IVaultStrategy, AccessControl {
     // ══════════════════════════════════════════════════════════════
 
     /// @inheritdoc IVaultStrategy
+    /// @dev MED-NEW-02 fix: Validates lido address is non-zero before attempting transfer.
     function stakeEth(uint256 amount) external onlyRole(Roles.STRATEGY_MANAGER_ROLE) {
         if (amount == 0) revert OszillorErrors.ZeroAmount();
+        if (address(lido) == address(0)) revert OszillorErrors.ZeroAddress();
         // In production: unwrap WETH → ETH → Lido.submit()
         // For Sepolia/testing: transfer WETH to lido mock which returns stETH
         uint256 stEthBefore = lido.balanceOf(address(this));
@@ -100,8 +105,10 @@ contract VaultStrategy is IVaultStrategy, AccessControl {
     }
 
     /// @inheritdoc IVaultStrategy
+    /// @dev MED-NEW-02 fix: Validates lido address is non-zero before attempting transfer.
     function unstakeEth(uint256 stEthAmount) external onlyRole(Roles.STRATEGY_MANAGER_ROLE) {
         if (stEthAmount == 0) revert OszillorErrors.ZeroAmount();
+        if (address(lido) == address(0)) revert OszillorErrors.ZeroAddress();
         // In production: Lido withdrawal queue or secondary market
         // For Sepolia/testing: transfer stETH to lido mock which returns WETH
         uint256 wethBefore = weth.balanceOf(address(this));
@@ -228,15 +235,17 @@ contract VaultStrategy is IVaultStrategy, AccessControl {
         uint256 expectedOut = (wethAmount * ethPrice) / 1e20;
         uint256 amountOutMin = (expectedOut * (BPS - MAX_SLIPPAGE_BPS)) / BPS;
 
-        weth.safeIncreaseAllowance(address(uniRouter), wethAmount);
+        // MED-NEW-05 fix: Reset allowance to exact amount to prevent stale accumulation
+        weth.forceApprove(address(uniRouter), wethAmount);
 
+        // HIGH-NEW-02 fix: Use block.timestamp + offset instead of block.timestamp
         uint256 amountOut = uniRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: address(weth),
                 tokenOut: address(usdc),
                 fee: POOL_FEE,
                 recipient: address(this),
-                deadline: block.timestamp,
+                deadline: block.timestamp + SWAP_DEADLINE_OFFSET,
                 amountIn: wethAmount,
                 amountOutMinimum: amountOutMin,
                 sqrtPriceLimitX96: 0
@@ -252,15 +261,17 @@ contract VaultStrategy is IVaultStrategy, AccessControl {
         uint256 expectedOut = (usdcAmount * 1e20) / ethPrice;
         uint256 amountOutMin = (expectedOut * (BPS - MAX_SLIPPAGE_BPS)) / BPS;
 
-        usdc.safeIncreaseAllowance(address(uniRouter), usdcAmount);
+        // MED-NEW-05 fix: Reset allowance to exact amount to prevent stale accumulation
+        usdc.forceApprove(address(uniRouter), usdcAmount);
 
+        // HIGH-NEW-02 fix: Use block.timestamp + offset instead of block.timestamp
         uint256 amountOut = uniRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: address(usdc),
                 tokenOut: address(weth),
                 fee: POOL_FEE,
                 recipient: address(this),
-                deadline: block.timestamp,
+                deadline: block.timestamp + SWAP_DEADLINE_OFFSET,
                 amountIn: usdcAmount,
                 amountOutMinimum: amountOutMin,
                 sqrtPriceLimitX96: 0
