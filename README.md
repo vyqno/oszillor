@@ -16,7 +16,8 @@
 
 Users deposit ETH to earn Lido staking yield. When markets crash, the protocol detects the threat via AI, pauses itself, and rescues funds — without human intervention.
 
-> **Source Code**: [github.com/vyqno/oszillor](https://github.com/vyqno/oszillor) | **Networks**: Base Sepolia + Ethereum Sepolia | **Demo**: [`demo/e2e-master.sh`](./demo/e2e-master.sh) (live on-chain transactions)
+> **Live UI**: [oszillor.replit.app](https://oszillor.replit.app) | **Source Code**: [github.com/vyqno/oszillor](https://github.com/vyqno/oszillor)
+> **Networks**: Base Sepolia + Ethereum Sepolia | **Demo**: [`demo/e2e-master.sh`](./demo/e2e-master.sh)
 
 ## 📖 Table of Contents
 
