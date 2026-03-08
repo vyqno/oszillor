@@ -50,10 +50,10 @@ contract OszillorTokenPoolTest is Test {
             address(router)
         );
 
-        // Grant pool RISK_MANAGER_ROLE on token so it can mint/burn shares
-        token.grantRole(Roles.RISK_MANAGER_ROLE, address(pool));
-        // Grant admin RISK_MANAGER_ROLE so it can mint test shares
-        token.grantRole(Roles.RISK_MANAGER_ROLE, admin);
+        // Grant pool TOKEN_MINTER_ROLE on token so it can mint/burn shares
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, address(pool));
+        // Grant admin TOKEN_MINTER_ROLE so it can mint test shares
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, admin);
 
         // Configure remote chain on pool
         TokenPool.ChainUpdate[] memory chains = new TokenPool.ChainUpdate[](1);

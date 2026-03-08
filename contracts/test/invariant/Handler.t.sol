@@ -88,7 +88,7 @@ contract InvariantHandler is Test {
         // Respect rate limit (55s)
         vm.warp(block.timestamp + 56);
 
-        vm.prank(address(vault)); // vault has RISK_MANAGER_ROLE
+        // Handler has RISK_MANAGER_ROLE on vault (granted in Invariant.t.sol setUp)
         vault.updateRiskScore(score, confidence, keccak256("test"));
     }
 

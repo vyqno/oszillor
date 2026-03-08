@@ -75,13 +75,17 @@ contract OszillorInvariantTest is StdInvariant, Test {
         require(address(vault) == predictedVault, "Vault address mismatch");
 
         // Grant roles to vault on token
-        token.grantRole(Roles.RISK_MANAGER_ROLE, address(vault));
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, address(vault));
         token.grantRole(Roles.REBASE_EXECUTOR_ROLE, address(vault));
 
         vm.stopPrank();
 
         // Deploy handler
         handler = new InvariantHandler(token, vault, usdc);
+
+        // Grant handler RISK_MANAGER_ROLE on vault for updateRiskScore calls
+        vm.prank(admin);
+        vault.grantRole(Roles.RISK_MANAGER_ROLE, address(handler));
 
         // Target only the handler
         targetContract(address(handler));

@@ -16,7 +16,7 @@ contract LibrariesTest is Test {
     // ═══════════════════════════════════════════════════════════════
 
     function test_roles_areDistinct() public pure {
-        bytes32[9] memory roles = [
+        bytes32[11] memory roles = [
             Roles.CONFIG_ADMIN_ROLE,
             Roles.CROSS_CHAIN_ADMIN_ROLE,
             Roles.RISK_MANAGER_ROLE,
@@ -25,7 +25,9 @@ contract LibrariesTest is Test {
             Roles.EMERGENCY_PAUSER_ROLE,
             Roles.EMERGENCY_UNPAUSER_ROLE,
             Roles.FEE_RATE_SETTER_ROLE,
-            Roles.FEE_WITHDRAWER_ROLE
+            Roles.FEE_WITHDRAWER_ROLE,
+            Roles.STRATEGY_MANAGER_ROLE,
+            Roles.TOKEN_MINTER_ROLE
         ];
 
         for (uint256 i = 0; i < roles.length; i++) {

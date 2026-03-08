@@ -83,7 +83,7 @@ contract CREIntegrationTest is Test {
         assertEq(address(vault), predictedVault, "vault address prediction failed");
 
         // Grant token roles to vault (for mintShares, burnShares, rebase)
-        token.grantRole(Roles.RISK_MANAGER_ROLE, address(vault));
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, address(vault));
         token.grantRole(Roles.REBASE_EXECUTOR_ROLE, address(vault));
 
         vm.stopPrank();

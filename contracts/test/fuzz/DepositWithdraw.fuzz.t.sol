@@ -45,7 +45,7 @@ contract DepositWithdrawFuzzTest is Test {
         );
 
         // Grant vault roles on token
-        token.grantRole(Roles.RISK_MANAGER_ROLE, address(vault));
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, address(vault));
         token.grantRole(Roles.REBASE_EXECUTOR_ROLE, address(vault));
 
         vm.stopPrank();

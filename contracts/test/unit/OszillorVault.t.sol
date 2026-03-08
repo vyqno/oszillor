@@ -61,8 +61,8 @@ contract OszillorVaultTest is Test {
             feeRecipient
         );
 
-        // Grant vault RISK_MANAGER_ROLE on token (so vault can mint/burn shares)
-        token.grantRole(Roles.RISK_MANAGER_ROLE, address(vault));
+        // Grant vault TOKEN_MINTER_ROLE on token (so vault can mint/burn shares)
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, address(vault));
         // Grant vault REBASE_EXECUTOR_ROLE on token (so vault can forward rebase calls)
         token.grantRole(Roles.REBASE_EXECUTOR_ROLE, address(vault));
 
@@ -121,7 +121,7 @@ contract OszillorVaultTest is Test {
     function test_constructor_rolesSetCorrectly() public view {
         // HIGH-04: All roles in constructor
         assertTrue(vault.hasRole(Roles.RISK_MANAGER_ROLE, riskEngine));
-        assertTrue(vault.hasRole(Roles.RISK_MANAGER_ROLE, address(vault)));
+        assertFalse(vault.hasRole(Roles.RISK_MANAGER_ROLE, address(vault)));
         assertTrue(vault.hasRole(Roles.REBASE_EXECUTOR_ROLE, rebaseExecutor));
         assertTrue(vault.hasRole(Roles.SENTINEL_ROLE, sentinel));
     }

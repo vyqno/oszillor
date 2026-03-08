@@ -88,15 +88,14 @@ contract PeersTest is Test {
     }
 
     function test_hub_broadcastRiskState() public {
-        vm.deal(alice, 1 ether);
-        vm.prank(alice);
-        
-        vm.expectEmit(true, true, true, true, address(hub));
-        
-        // Emits RiskStateBroadcast(nonce, riskScore, rebaseIndex, emergencyMode, spokeCount)
+        vm.deal(admin, 1 ether);
+
         uint256 expectedNonce = hub.currentNonce() + 1;
+
+        vm.expectEmit(true, true, true, true, address(hub));
         emit IHubPeer.RiskStateBroadcast(expectedNonce, 50, 1e18, false, 1);
-        
+
+        vm.prank(admin);
         hub.broadcastRiskState{value: 0.1 ether}();
         assertEq(hub.currentNonce(), expectedNonce);
     }

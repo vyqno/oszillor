@@ -23,7 +23,7 @@ contract OszillorTokenFuzzTest is Test {
 
         vm.startPrank(admin);
         token = new OszillorToken("OSZILLOR", "OSZ", admin);
-        token.grantRole(Roles.RISK_MANAGER_ROLE, vault);
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, vault);
         token.grantRole(Roles.REBASE_EXECUTOR_ROLE, executor);
         vm.stopPrank();
     }

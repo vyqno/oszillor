@@ -17,7 +17,7 @@ contract OszillorTokenTest is Test {
     OszillorToken token;
 
     address admin = makeAddr("admin");
-    address vault = makeAddr("vault");        // RISK_MANAGER_ROLE
+    address vault = makeAddr("vault");        // TOKEN_MINTER_ROLE
     address executor = makeAddr("executor");  // REBASE_EXECUTOR_ROLE
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
@@ -28,7 +28,7 @@ contract OszillorTokenTest is Test {
 
         vm.startPrank(admin);
         token = new OszillorToken("OSZILLOR", "OSZ", admin);
-        token.grantRole(Roles.RISK_MANAGER_ROLE, vault);
+        token.grantRole(Roles.TOKEN_MINTER_ROLE, vault);
         token.grantRole(Roles.REBASE_EXECUTOR_ROLE, executor);
         vm.stopPrank();
 
