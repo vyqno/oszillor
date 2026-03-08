@@ -152,4 +152,42 @@ library OszillorErrors {
     /// @param externalBalance The vault's actual token balance.
     /// @param internalAccounting The internally tracked total assets.
     error DonationDetected(uint256 externalBalance, uint256 internalAccounting);
+
+    // ──────────────────── Audit Fixes (v2-security-audit-new.md) ────────────────────
+
+    /// @notice The vault does not have enough liquid WETH to fulfill the requested operation.
+    /// @param needed Amount of WETH required.
+    /// @param available Amount of WETH actually available after strategy pull.
+    error InsufficientLiquidity(uint256 needed, uint256 available);
+
+    /// @notice The risk score is outside the valid range [0, 100].
+    /// @param score The invalid risk score provided.
+    error InvalidRiskScore(uint256 score);
+
+    /// @notice Emergency de-risk was triggered too soon after the previous trigger.
+    /// @param nextAllowed Earliest timestamp the next emergency trigger is permitted.
+    error EmergencyTooFrequent(uint256 nextAllowed);
+
+    /// @notice An unsupported CCIP message was received by a contract that does not handle inbound messages.
+    error InboundMessageNotSupported();
+
+    // ──────────────────── Alert Registry ────────────────────
+
+    /// @notice The alert condition type is invalid (must be 0-2).
+    /// @param condition The invalid condition value provided.
+    error InvalidAlertCondition(uint8 condition);
+
+    /// @notice The alert threshold is outside the valid range [0, 100].
+    /// @param threshold The invalid threshold provided.
+    error InvalidAlertThreshold(uint256 threshold);
+
+    /// @notice The alert webhook URL is empty.
+    error EmptyWebhookUrl();
+
+    /// @notice The alert rule ID does not exist.
+    /// @param ruleId The requested rule ID.
+    error AlertRuleNotFound(uint256 ruleId);
+
+    /// @notice Only the contract owner can withdraw USDC.
+    error NotOwner();
 }

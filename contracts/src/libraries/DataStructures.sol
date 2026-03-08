@@ -115,6 +115,48 @@ struct RebalanceReport {
     uint256 timeDelta;
 }
 
+/// @notice Alert condition types for W4 alert subscriptions.
+/// @dev RISK_ABOVE = trigger when riskScore > threshold,
+///      RISK_BELOW = trigger when riskScore < threshold,
+///      EMERGENCY = trigger on any emergency mode activation.
+enum AlertCondition {
+    RISK_ABOVE,
+    RISK_BELOW,
+    EMERGENCY
+}
+
+/// @notice CRE W4 alert subscription stored in AlertRegistry.
+/// @param subscriber Address that created the alert (from x402 payment).
+/// @param condition The condition type that triggers the alert.
+/// @param threshold Numeric threshold for RISK_ABOVE/RISK_BELOW (0-100). Ignored for EMERGENCY.
+/// @param webhookUrl Off-chain webhook URL for notification delivery.
+/// @param createdAt Block timestamp when the alert was registered.
+/// @param ttl Time-to-live in seconds (0 = no expiry).
+/// @param active Whether the alert is currently active.
+struct AlertRule {
+    address subscriber;
+    AlertCondition condition;
+    uint256 threshold;
+    string webhookUrl;
+    uint256 createdAt;
+    uint256 ttl;
+    bool active;
+}
+
+/// @notice CRE W4 alert report payload decoded from the HTTP trigger.
+/// @param subscriber Address that created the alert.
+/// @param condition The alert condition type (uint8-encoded).
+/// @param threshold Numeric threshold (0-100).
+/// @param webhookUrl Off-chain webhook URL.
+/// @param ttl Time-to-live in seconds.
+struct AlertReport {
+    address subscriber;
+    uint8 condition;
+    uint256 threshold;
+    string webhookUrl;
+    uint256 ttl;
+}
+
 /// @notice CCIP message type identifier for hub-spoke communication.
 /// @dev Used to route incoming CCIP messages to the correct handler.
 enum CcipMessageType {
