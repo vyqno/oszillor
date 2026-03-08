@@ -147,11 +147,13 @@ library CCIPOperations {
     /// @param tokenAmounts The token amounts from the received CCIP message.
     /// @param expectedToken The expected token address.
     /// @param expectedAmount The expected token amount.
+    /// @dev MED-NEW-06 fix: Added array length check before accessing index 0.
     function validateTokenAmounts(
         Client.EVMTokenAmount[] memory tokenAmounts,
         address expectedToken,
         uint256 expectedAmount
     ) internal pure {
+        require(tokenAmounts.length >= 1, "No token amounts");
         if (tokenAmounts[0].token != expectedToken) {
             revert InvalidToken(tokenAmounts[0].token);
         }

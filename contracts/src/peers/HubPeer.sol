@@ -55,7 +55,8 @@ contract HubPeer is OszillorPeer, IHubPeer {
         return _spokeChainSelectors;
     }
 
-    function broadcastRiskState() external payable override whenNotPaused {
+    /// @dev HIGH-NEW-06 fix: Added CROSS_CHAIN_ADMIN_ROLE restriction and ETH refund.
+    function broadcastRiskState() external payable override whenNotPaused onlyRole(Roles.CROSS_CHAIN_ADMIN_ROLE) {
         uint256 nonce = ++currentNonce;
         
         RiskStateSync memory stateSync = RiskStateSync({
@@ -78,10 +79,12 @@ contract HubPeer is OszillorPeer, IHubPeer {
                     receiver: abi.encode(spokeAddress),
                     data: messageData,
                     tokenAmounts: new Client.EVMTokenAmount[](0),
+                    // LOW-NEW-04 fix: State sync carries full state snapshot, so
+                    // out-of-order is safe (consistent with CCIPOperations.buildSyncMessage).
                     extraArgs: Client._argsToBytes(
                         Client.EVMExtraArgsV2({
                             gasLimit: _gasLimits[uint8(CcipMessageType.RISK_STATE_SYNC)],
-                            allowOutOfOrderExecution: false
+                            allowOutOfOrderExecution: true
                         })
                     ),
                     feeToken: address(0) // Assuming native payment for now
@@ -103,9 +106,17 @@ contract HubPeer is OszillorPeer, IHubPeer {
             stateSync.emergencyMode,
             count
         );
+
+        // HIGH-NEW-06 fix: Refund excess ETH to caller
+        uint256 remaining = address(this).balance;
+        if (remaining > 0) {
+            (bool refundSuccess,) = msg.sender.call{value: remaining}("");
+            require(refundSuccess, "ETH refund failed");
+        }
     }
 
-    function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
-        // Implement receiving logic for cross-chain actions from spokes if any
+    /// @dev MED-NEW-07 fix: Revert on unsupported inbound messages instead of silently dropping.
+    function _ccipReceive(Client.Any2EVMMessage memory) internal pure override {
+        revert OszillorErrors.InboundMessageNotSupported();
     }
 }

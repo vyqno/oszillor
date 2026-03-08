@@ -82,6 +82,11 @@ contract RiskEngine is CREReceiver {
         // Decode the report
         RiskReport memory riskReport = abi.decode(report, (RiskReport));
 
+        // LOW-NEW-01 fix: Bounds check on risk score
+        if (riskReport.riskScore > 100) {
+            revert OszillorErrors.InvalidRiskScore(riskReport.riskScore);
+        }
+
         // HIGH-05: Rate limit — min 55s between updates
         if (block.timestamp < lastRiskUpdate + MIN_UPDATE_INTERVAL) {
             revert OszillorErrors.UpdateTooFrequent(lastRiskUpdate + MIN_UPDATE_INTERVAL);

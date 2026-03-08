@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import {CREReceiver} from "./CREReceiver.sol";
 import {IOszillorVault} from "../interfaces/IOszillorVault.sol";
+import {OszillorErrors} from "../libraries/OszillorErrors.sol";
 import {ThreatReport} from "../libraries/DataStructures.sol";
 
 /// @title EventSentinel
@@ -30,10 +31,17 @@ contract EventSentinel is CREReceiver {
     /// @notice Maximum allowed emergency duration (4 hours). HIGH-06 fix.
     uint256 public constant MAX_EMERGENCY_DURATION = 4 hours;
 
+    /// @notice Minimum interval between emergency triggers (HIGH-NEW-04 fix).
+    /// @dev Prevents a compromised W2 workflow from perpetually resetting the timer.
+    uint256 public constant MIN_EMERGENCY_INTERVAL = 4 hours;
+
     // ──────────────────── State ────────────────────
 
     /// @notice Reference to the OszillorVault for typed interface calls.
     IOszillorVault public immutable vault;
+
+    /// @notice Timestamp of the last emergency trigger (HIGH-NEW-04 fix).
+    uint256 public lastEmergencyTrigger;
 
     /// @notice Constructs the EventSentinel with vault reference and CRE params.
     /// @param _vault Address of the OszillorVault contract.
@@ -59,6 +67,12 @@ contract EventSentinel is CREReceiver {
         ThreatReport memory threat = abi.decode(report, (ThreatReport));
 
         if (threat.emergencyHalt) {
+            // HIGH-NEW-04 fix: Cooldown between emergency triggers
+            if (block.timestamp < lastEmergencyTrigger + MIN_EMERGENCY_INTERVAL) {
+                revert OszillorErrors.EmergencyTooFrequent(lastEmergencyTrigger + MIN_EMERGENCY_INTERVAL);
+            }
+            lastEmergencyTrigger = block.timestamp;
+
             // Bound the duration to MAX_EMERGENCY_DURATION (HIGH-06)
             uint256 duration = threat.suggestedDuration;
             if (duration > MAX_EMERGENCY_DURATION) {
