@@ -108,7 +108,8 @@ contract OszillorVault is
 
         // HIGH-04: All roles set in constructor — no post-deploy setter
         _grantRole(Roles.RISK_MANAGER_ROLE, _riskEngine);
-        _grantRole(Roles.RISK_MANAGER_ROLE, address(this)); // vault mints/burns via token
+        // HIGH-NEW-01 fix: Vault no longer grants itself RISK_MANAGER_ROLE.
+        // Token mint/burn uses TOKEN_MINTER_ROLE instead (granted on OszillorToken).
         _grantRole(Roles.REBASE_EXECUTOR_ROLE, _rebaseExecutor);
         _grantRole(Roles.SENTINEL_ROLE, _sentinel);
 
@@ -158,9 +159,10 @@ contract OszillorVault is
         // Interactions — pull WETH from depositor
         asset.safeTransferFrom(msg.sender, address(this), assets);
 
-        // Route deposited WETH to strategy for immediate yield deployment
+        // CRIT-NEW-02 fix: Send WETH to strategy for custody, but do NOT auto-stake.
+        // The next W3 rebalance cycle will allocate per the current risk tier.
+        // Auto-staking 100% to Lido violated the risk model during elevated risk states.
         asset.safeTransfer(address(strategy), assets);
-        strategy.stakeEth(assets);
 
         emit Deposit(msg.sender, assets, shares);
     }
@@ -203,11 +205,14 @@ contract OszillorVault is
     // ══════════════════════════════════════════════════════════════
 
     /// @inheritdoc IOszillorVault
+    /// @dev HIGH-NEW-01 fix: Added bounds check [0, 100] to prevent invalid risk scores.
     function updateRiskScore(
         uint256 score,
         uint256 confidence,
         bytes32 reasoningHash
     ) external onlyRole(Roles.RISK_MANAGER_ROLE) {
+        if (score > 100) revert OszillorErrors.InvalidRiskScore(score);
+
         _riskState = RiskState({
             riskScore: score,
             confidence: confidence,
@@ -293,8 +298,12 @@ contract OszillorVault is
 
     /// @notice Withdraws all accrued streaming fees to the treasury.
     /// @dev Only FEE_WITHDRAWER_ROLE. HIGH-07: Only transfers accruedFees, never full balance.
+    ///      CRIT-NEW-01 fix: Decrements _internalTotalAssets to prevent phantom asset deficit.
     function withdrawFees() external onlyRole(Roles.FEE_WITHDRAWER_ROLE) {
-        _ensureLiquidity(accruedFees);
+        uint256 amount = accruedFees;
+        if (amount == 0) revert OszillorErrors.ZeroAmount();
+        _internalTotalAssets -= amount;
+        _ensureLiquidity(amount);
         _withdrawFees(asset);
     }
 
@@ -370,10 +379,15 @@ contract OszillorVault is
     // ══════════════════════════════════════════════════════════════
 
     /// @dev Pulls WETH from strategy if vault lacks liquidity to fulfill a transfer.
+    ///      HIGH-NEW-03 fix: Checks return value and reverts with meaningful error.
     function _ensureLiquidity(uint256 needed) internal {
         uint256 vaultBalance = asset.balanceOf(address(this));
         if (vaultBalance < needed) {
-            strategy.withdrawToVault(needed - vaultBalance);
+            uint256 received = strategy.withdrawToVault(needed - vaultBalance);
+            uint256 totalAvailable = vaultBalance + received;
+            if (totalAvailable < needed) {
+                revert OszillorErrors.InsufficientLiquidity(needed, totalAvailable);
+            }
         }
     }
 
