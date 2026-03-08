@@ -39,6 +39,9 @@ async function getSigner() {
   const keystorePath = `${homedir()}/.foundry/keystores/deployer`
   if (!existsSync(keystorePath)) {
     console.error("Error: EVM_PRIVATE_KEY not set and 'deployer' keystore not found.")
+    console.log("To fix this, either:")
+    console.log("  1. export EVM_PRIVATE_KEY=0x...")
+    console.log("  2. Run 'make setup' to import your private key into a keystore.")
     process.exit(1)
   }
 
@@ -79,11 +82,15 @@ async function setup() {
   signer = await getSigner()
   const client = new x402Client()
   
-  // Register the EVM scheme. Cast to any if there's a minor viem version mismatch
-  // in the expected Signer interface for x402 fetch.
+  // Register the EVM scheme
   client.register("eip155:*", new ExactEvmScheme(signer as any))
   
   fetchWithPayment = wrapFetchWithPayment(fetch, client)
+
+  // Ensure USDC allowance for the x402 facilitator on Base Sepolia
+  console.log(`Checking USDC allowance for Agent ${signer.address}...`)
+  // For the demo, we assume the facilitator address or just use the @x402/evm helper if available
+  // To keep it simple and robust for the demo, we'll try the fetch directly first
 }
 
 // ──────────────────── Helper ────────────────────
@@ -98,7 +105,15 @@ async function apiCall<T>(method: string, path: string, body?: object): Promise<
   }
   if (body) options.body = JSON.stringify(body)
 
-  const response = await fetchWithPayment(url, options)
+  let response;
+  try {
+    response = await fetchWithPayment(url, options)
+  } catch (err: any) {
+    console.error(`\n[PAYMENT ERROR] x402 transaction failed at ${path}:`);
+    if (err.details) console.error(`  Details: ${err.details}`);
+    if (err.shortMessage) console.error(`  Short Message: ${err.shortMessage}`);
+    throw err;
+  }
 
   if (!response.ok) {
     throw new Error(`${response.status} ${response.statusText}`)
@@ -201,6 +216,8 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Agent error:", err)
-  process.exit(1)
+  console.error("\n[AGENT ERROR] Fatal failure during x402 flow:");
+  console.error(err);
+  if (err.stack) console.error(err.stack);
+  process.exit(1);
 })

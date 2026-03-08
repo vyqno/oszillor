@@ -237,9 +237,7 @@ api-test: ## Test all 6 API endpoints (server must be running)
 	@echo "GET /v1/risk/full (expects 402):"
 	@curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://localhost:4021/v1/risk/full
 	@echo "POST /v1/alerts (expects 402):"
-	@curl -s -o /dev/null -w "  HTTP %{http_code}\n" -X POST http://localhost:4021/v1/alerts \
-		-H "Content-Type: application/json" \
-		-d '{"subscriber":"0x1234","condition":"RISK_ABOVE","threshold":70}'
+	@curl -s -o /dev/null -w "  HTTP %{http_code}\n" -X POST http://localhost:4021/v1/alerts -H "Content-Type: application/json" -d '{"subscriber":"0x1234","condition":"RISK_ABOVE","threshold":70}'
 	@echo "GET /v1/alerts/1 (expects 402 or 404):"
 	@curl -s -o /dev/null -w "  HTTP %{http_code}\n" http://localhost:4021/v1/alerts/1
 	@echo ""

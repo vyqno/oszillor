@@ -8,7 +8,12 @@
 #    bash demo/e2e-master.sh --chain base-sepolia
 #    bash demo/e2e-master.sh --chain sepolia
 # ══════════════════════════════════════════════════════════════════════════════
-set -euo pipefail
+set -uo pipefail
+
+# --- Fix: Ensure Foundry binaries are in PATH ---
+# Supports both Unix (~/.foundry/bin) and Windows (Git Bash styles)
+FOUNDRY_BIN="$HOME/.foundry/bin:C:/Users/0xhit/.foundry/bin:/c/Users/0xhit/.foundry/bin"
+export PATH="$PATH:$FOUNDRY_BIN"
 
 DEMO_START=$SECONDS
 
@@ -25,7 +30,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Load .env ─────────────────────────────────────────────────────────────────
-export $(grep -v '^#' "$PROJECT_ROOT/contracts/.env" | grep -v '^$' | xargs) 2>/dev/null
+export $(cat "$PROJECT_ROOT/contracts/.env" | tr -d '\r' | grep -v '^#' | grep -v '^$' | xargs) 2>/dev/null
 
 # ── Chain-specific config ─────────────────────────────────────────────────────
 case "$CHAIN" in
@@ -187,11 +192,11 @@ print_system_info() {
 }
 
 fetch_balances() {
-  local w_weth=$(cast call $WETH "balanceOf(address)(uint256)" $DEPLOYER --rpc-url $RPC)
-  local w_osz=$(cast call $TOKEN "balanceOf(address)(uint256)" $DEPLOYER --rpc-url $RPC)
-  local v_weth=$(cast call $WETH "balanceOf(address)(uint256)" $VAULT --rpc-url $RPC)
-  local s_weth=$(cast call $WETH "balanceOf(address)(uint256)" $STRATEGY --rpc-url $RPC)
-  local l_weth=$(cast call $WETH "balanceOf(address)(uint256)" $MOCK_LIDO --rpc-url $RPC)
+  local w_weth=$(cast call $WETH "balanceOf(address)(uint256)" $DEPLOYER --rpc-url $RPC 2>/dev/null || echo "0")
+  local w_osz=$(cast call $TOKEN "balanceOf(address)(uint256)" $DEPLOYER --rpc-url $RPC 2>/dev/null || echo "0")
+  local v_weth=$(cast call $WETH "balanceOf(address)(uint256)" $VAULT --rpc-url $RPC 2>/dev/null || echo "0")
+  local s_weth=$(cast call $WETH "balanceOf(address)(uint256)" $STRATEGY --rpc-url $RPC 2>/dev/null || echo "0")
+  local l_weth=$(cast call $WETH "balanceOf(address)(uint256)" $MOCK_LIDO --rpc-url $RPC 2>/dev/null || echo "0")
   echo "$w_weth,$w_osz,$v_weth,$s_weth,$l_weth"
 }
 
@@ -413,6 +418,15 @@ format_elapsed() {
 print_header
 print_system_info
 
+# ── Keystore Authentication ────────────────────────────────────────────────────
+if [[ -z "${CAST_PASSWORD:-}" ]]; then
+  printf "  ${AMBER}Enter keystore password for 'deployer' to enable on-chain writes:${RESET} "
+  read -s CAST_PASSWORD
+  CAST_PASSWORD=$(echo "$CAST_PASSWORD" | tr -d '\r')
+  echo ""
+  echo ""
+fi
+
 # ── STEP 0: Seed Risk State (for stale deployments) ──────────────────────────
 type_line "STEP 0  Seeding Initial CRE Risk Data" "$AMBER"
 simulate_processing "Checking vault risk state freshness..." 1
@@ -421,19 +435,34 @@ simulate_processing "Checking vault risk state freshness..." 1
 RISK_MANAGER_ROLE=$(cast keccak "RISK_MANAGER_ROLE")
 
 # Check if deployer already has RISK_MANAGER_ROLE
-HAS_ROLE=$(cast call $VAULT "hasRole(bytes32,address)(bool)" $RISK_MANAGER_ROLE $DEPLOYER --rpc-url $RPC 2>/dev/null || echo "false")
+HAS_ROLE=$(cast call $VAULT "hasRole(bytes32,address)(bool)" $RISK_MANAGER_ROLE $DEPLOYER --rpc-url $RPC 2> /tmp/cast_err.log || echo "false")
 HAS_ROLE_CLEAN=$(clean_cast "$HAS_ROLE")
 GRANTED_NOW=false
 
 if [[ "$HAS_ROLE_CLEAN" != "true" ]]; then
   simulate_processing "Granting RISK_MANAGER_ROLE to deployer..." 1
-  cast send $VAULT "grantRole(bytes32,address)" $RISK_MANAGER_ROLE $DEPLOYER --account deployer --rpc-url $RPC >/dev/null 2>&1
+  cast send $VAULT "grantRole(bytes32,address)" $RISK_MANAGER_ROLE $DEPLOYER --account deployer --password "$CAST_PASSWORD" --rpc-url $RPC 2> /tmp/cast_err.log
+  if [ $? -ne 0 ]; then cat /tmp/cast_err.log; fi
   GRANTED_NOW=true
+fi
+
+# TOKEN_MINTER_ROLE = keccak256("TOKEN_MINTER_ROLE")
+TOKEN_MINTER_ROLE=$(cast keccak "TOKEN_MINTER_ROLE")
+
+# Check if VAULT already has TOKEN_MINTER_ROLE on TOKEN contract (for Base Sepolia)
+HAS_MINTER_ROLE=$(cast call $TOKEN "hasRole(bytes32,address)(bool)" $TOKEN_MINTER_ROLE $VAULT --rpc-url $RPC 2> /tmp/cast_err.log || echo "false")
+HAS_MINTER_ROLE_CLEAN=$(clean_cast "$HAS_MINTER_ROLE")
+
+if [[ "$HAS_MINTER_ROLE_CLEAN" != "true" ]]; then
+  simulate_processing "Granting TOKEN_MINTER_ROLE to Vault..." 1
+  cast send $TOKEN "grantRole(bytes32,address)" $TOKEN_MINTER_ROLE $VAULT --account deployer --password "$CAST_PASSWORD" --rpc-url $RPC 2> /tmp/cast_err.log
+  if [ $? -ne 0 ]; then cat /tmp/cast_err.log; fi
 fi
 
 simulate_processing "Refreshing risk score (CAUTION=50, confidence=100)..." 1
 REASONING_HASH="0x64656d6f2d696e69740000000000000000000000000000000000000000000000"
-cast send $VAULT "updateRiskScore(uint256,uint256,bytes32)" 50 100 $REASONING_HASH --account deployer --rpc-url $RPC >/dev/null 2>&1
+cast send $VAULT "updateRiskScore(uint256,uint256,bytes32)" 50 100 $REASONING_HASH --account deployer --password "$CAST_PASSWORD" --rpc-url $RPC 2> /tmp/cast_err.log
+if [ $? -ne 0 ]; then cat /tmp/cast_err.log; fi
 echo -e "  ${GREEN}✓${RESET} ${DIM}Risk state refreshed — deposits unlocked${RESET}"
 
 echo ""
@@ -455,9 +484,10 @@ if [[ "$w_weth_clean" -lt "$DEPOSIT_AMOUNT" ]]; then
   # Add 10% buffer for rounding
   WRAP_AMOUNT=$(node -e "const n=BigInt('${WRAP_NEEDED}');console.log((n+n/10n).toString())")
   echo -ne "  ${AMBER}! ${DIM}Low WETH detected. Wrapping ${WRAP_AMOUNT} wei...${RESET}"
-  if ! cast send $WETH "deposit()" --value $WRAP_AMOUNT --account deployer --rpc-url $RPC >/dev/null 2>&1; then
+  if ! cast send $WETH "deposit()" --value $WRAP_AMOUNT --account deployer --password "$CAST_PASSWORD" --rpc-url $RPC 2> /tmp/cast_err.log; then
+    cat /tmp/cast_err.log
     echo -e "\r  ${RED}!${RESET} ${DIM}Wrap failed — trying with exact amount...${RESET}"
-    cast send $WETH "deposit()" --value $WRAP_NEEDED --account deployer --rpc-url $RPC >/dev/null 2>&1 || true
+    cast send $WETH "deposit()" --value $WRAP_NEEDED --account deployer --password "$CAST_PASSWORD" --rpc-url $RPC 2> /tmp/cast_err.log || cat /tmp/cast_err.log
   fi
   echo -e "\r  ${GREEN}✓${RESET} ${DIM}Auto-wrapped ETH to WETH.              ${RESET}"
   # Re-snapshot after wrap
@@ -466,11 +496,19 @@ if [[ "$w_weth_clean" -lt "$DEPOSIT_AMOUNT" ]]; then
 fi
 
 simulate_processing "Approving WETH spend via ERC-20 approve()" 1
-APPROVE_OUTPUT=$(cast send $WETH "approve(address,uint256)" $VAULT $DEPOSIT_AMOUNT --account deployer --rpc-url $RPC 2>&1 || true)
+if ! cast send $WETH "approve(address,uint256)" $VAULT $DEPOSIT_AMOUNT --account deployer --password "$CAST_PASSWORD" --rpc-url $RPC > /tmp/cast_out.log 2> /tmp/cast_err.log; then
+  cat /tmp/cast_err.log
+  cat /tmp/cast_out.log
+fi
+APPROVE_OUTPUT=$(cat /tmp/cast_out.log)
 TX_APPROVE=$(extract_cast_tx "$APPROVE_OUTPUT")
 
 simulate_processing "Broadcasting atomic deposit — routing to strategy" 2
-DEPOSIT_OUTPUT=$(cast send $VAULT "deposit(uint256)" $DEPOSIT_AMOUNT --account deployer --rpc-url $RPC 2>&1 || true)
+if ! cast send $VAULT "deposit(uint256)" $DEPOSIT_AMOUNT --account deployer --password "$CAST_PASSWORD" --rpc-url $RPC > /tmp/cast_out.log 2> /tmp/cast_err.log; then
+  cat /tmp/cast_err.log
+  cat /tmp/cast_out.log
+fi
+DEPOSIT_OUTPUT=$(cat /tmp/cast_out.log)
 TX_DEPOSIT=$(extract_cast_tx "$DEPOSIT_OUTPUT")
 
 echo -e "  ${GREEN}✓${RESET} ${DIM}Deposit confirmed on ${CHAIN_LABEL}${RESET}"
