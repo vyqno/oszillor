@@ -1,0 +1,12 @@
+{
+  "schedule": "*/60 * * * * *",
+  "alertEvm": {
+    "chainName": "ethereum-testnet-sepolia-base-1",
+    "alertRegistryAddress": "0x62998075686658C6069de79A05461Aed91663265",
+    "gasLimit": "300000"
+  },
+  "vaultEvm": {
+    "chainName": "ethereum-testnet-sepolia-base-1",
+    "vaultAddress": "0xa120B2d1acdc17FbB6C49BD222C05D74e1b0691d"
+  }
+}
