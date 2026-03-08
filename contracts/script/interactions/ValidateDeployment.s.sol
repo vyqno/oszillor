@@ -74,7 +74,7 @@ contract ValidateDeployment is Script {
         _check("Token name is OSZILLOR", keccak256(bytes(token.name())) == keccak256(bytes("OSZILLOR")));
         _check("Token symbol is OSZ", keccak256(bytes(token.symbol())) == keccak256(bytes("OSZ")));
         _check("Initial rebaseIndex is 1e18", token.rebaseIndex() == 1e18);
-        _check("Initial totalShares is 0", token.totalShares() == 0);
+        _check("Initial totalShares is 10000 (virtual offset)", token.totalShares() == 1e22);
         _check("Initial epoch is 0", token.epoch() == 0);
     }
 
@@ -86,7 +86,7 @@ contract ValidateDeployment is Script {
         _check("No emergency mode", !vault.emergencyMode());
         _check("Vault asset is WETH", address(vault.asset()) == _envAddressEither("WETH_ADDRESS", "WETH"));
         _check("Vault strategy points to STRATEGY_ADDRESS", address(vault.strategy()) == address(strategy));
-        _check("internalTotalAssets is 0", vault.internalTotalAssets() == 0);
+        _check("internalTotalAssets is 0.01 WETH (virtual offset)", vault.internalTotalAssets() == 1e16);
         _check("Fee rate is 50 bps (0.5%)", vault.feeRateBps() == 50);
         _check("Accrued fees is 0", vault.accruedFees() == 0);
     }

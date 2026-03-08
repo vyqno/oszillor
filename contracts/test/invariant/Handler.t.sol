@@ -43,8 +43,8 @@ contract InvariantHandler is Test {
         for (uint256 i = 0; i < 3; i++) {
             address actor = makeAddr(string(abi.encodePacked("actor", i)));
             actors.push(actor);
-            // Fund each actor with 1M USDC
-            usdc.mint(actor, 1_000_000e6);
+            // Fund each actor with 1000 WETH (v2 uses 18 decimals)
+            usdc.mint(actor, 1_000e18);
             vm.prank(actor);
             usdc.approve(address(vault), type(uint256).max);
         }
@@ -54,7 +54,7 @@ contract InvariantHandler is Test {
 
     function deposit(uint256 amount) external {
         currentActor = actors[amount % actors.length];
-        amount = bound(amount, 1e6, 100_000e6); // 1 — 100k USDC
+        amount = bound(amount, 1e15, 100e18); // 0.001 — 100 WETH (v2 18 decimals)
 
         vm.prank(currentActor);
         try vault.deposit(amount) {

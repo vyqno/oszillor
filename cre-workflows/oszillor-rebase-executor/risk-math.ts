@@ -62,6 +62,30 @@ export function calculateWeightedApy(allocations: Allocation[]): bigint {
   return weightedSum / 10_000n
 }
 
+// ──────────────────── Target ETH Allocation (v2) ────────────────────
+
+/**
+ * Maps risk tier to target ETH allocation in basis points.
+ *
+ * SAFE      → 10000 (100% ETH — full yield from Lido staking)
+ * CAUTION   → 7000  (70% ETH / 30% USDC hedge)
+ * DANGER    → 3000  (30% ETH / 70% USDC hedge)
+ * CRITICAL  → 0     (0% ETH / 100% USDC — full hedge to stables)
+ */
+export function calculateTargetEthPct(score: bigint): bigint {
+  const level = riskLevel(score)
+  switch (level) {
+    case "CRITICAL":
+      return 0n
+    case "DANGER":
+      return 3000n
+    case "CAUTION":
+      return 7000n
+    case "SAFE":
+      return 10000n
+  }
+}
+
 // ──────────────────── Rebase Factor Calculation ────────────────────
 
 /**

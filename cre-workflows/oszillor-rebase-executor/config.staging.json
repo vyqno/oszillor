@@ -1,11 +1,13 @@
 {
-  "schedule": "*/300 * * * * *",
-  "evms": [
-    {
-      "chainName": "ethereum-testnet-sepolia",
-      "vaultAddress": "0x0000000000000000000000000000000000000001",
-      "rebaseExecutorAddress": "0x0000000000000000000000000000000000000002",
-      "gasLimit": "500000"
-    }
-  ]
+    "schedule":  "*/300 * * * * *",
+    "stakingApyBps":  400,
+    "evms":  [
+                 {
+                     "chainName":  "ethereum-testnet-sepolia",
+                     "vaultAddress":  "0xbb6b66c2bd6c3e53869726f1eadc8cf824f8ff1d",
+                     "strategyAddress":  "0xdf6e5ebcaaff2a2a40c4a3e6b89e936a13747ccf",
+                     "rebaseExecutorAddress":  "0xeaa638afeb35d2020907856a8a4d5d092037d851",
+                     "gasLimit":  "500000"
+                 }
+             ]
 }

@@ -288,6 +288,56 @@ contract VaultStrategyTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //                     WITHDRAW TO VAULT
+    // ═══════════════════════════════════════════════════════════════
+
+    function test_withdrawToVault_idleWeth() public {
+        weth.mint(address(strategy), 10e18);
+
+        vm.prank(vault);
+        uint256 sent = strategy.withdrawToVault(5e18);
+
+        assertEq(sent, 5e18);
+        assertEq(weth.balanceOf(vault), 5e18);
+        assertEq(weth.balanceOf(address(strategy)), 5e18);
+    }
+
+    function test_withdrawToVault_allRequested() public {
+        // Withdraw exact full balance
+        weth.mint(address(strategy), 10e18);
+
+        vm.prank(vault);
+        uint256 sent = strategy.withdrawToVault(10e18);
+
+        assertEq(sent, 10e18);
+        assertEq(weth.balanceOf(vault), 10e18);
+        assertEq(weth.balanceOf(address(strategy)), 0);
+    }
+
+    function test_withdrawToVault_zeroAmount() public {
+        vm.prank(vault);
+        uint256 sent = strategy.withdrawToVault(0);
+        assertEq(sent, 0);
+    }
+
+    function test_withdrawToVault_onlyStrategyManager() public {
+        vm.prank(attacker);
+        vm.expectRevert();
+        strategy.withdrawToVault(1e18);
+    }
+
+    function test_withdrawToVault_partialWhenInsufficient() public {
+        weth.mint(address(strategy), 3e18);
+
+        vm.prank(vault);
+        uint256 sent = strategy.withdrawToVault(5e18);
+
+        // Only sends what's available
+        assertEq(sent, 3e18);
+        assertEq(weth.balanceOf(vault), 3e18);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //                     FUZZ: REBALANCE
     // ═══════════════════════════════════════════════════════════════
 

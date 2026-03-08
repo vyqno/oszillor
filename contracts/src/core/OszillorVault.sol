@@ -155,8 +155,12 @@ contract OszillorVault is
         // Mint shares to depositor via token
         token.mintShares(msg.sender, shares);
 
-        // Interactions — pull stablecoins last
+        // Interactions — pull WETH from depositor
         asset.safeTransferFrom(msg.sender, address(this), assets);
+
+        // Route deposited WETH to strategy for immediate yield deployment
+        asset.safeTransfer(address(strategy), assets);
+        strategy.stakeEth(assets);
 
         emit Deposit(msg.sender, assets, shares);
     }
@@ -185,7 +189,10 @@ contract OszillorVault is
         // Burn shares from withdrawer
         token.burnShares(msg.sender, shares);
 
-        // Interactions — push stablecoins last
+        // Ensure vault has enough liquidity (pull from strategy if needed)
+        _ensureLiquidity(assets);
+
+        // Interactions — push WETH to withdrawer
         asset.safeTransfer(msg.sender, assets);
 
         emit Withdraw(msg.sender, assets, shares);
@@ -287,6 +294,7 @@ contract OszillorVault is
     /// @notice Withdraws all accrued streaming fees to the treasury.
     /// @dev Only FEE_WITHDRAWER_ROLE. HIGH-07: Only transfers accruedFees, never full balance.
     function withdrawFees() external onlyRole(Roles.FEE_WITHDRAWER_ROLE) {
+        _ensureLiquidity(accruedFees);
         _withdrawFees(asset);
     }
 
@@ -360,6 +368,14 @@ contract OszillorVault is
     // ══════════════════════════════════════════════════════════════
     //                     INTERNAL HELPERS
     // ══════════════════════════════════════════════════════════════
+
+    /// @dev Pulls WETH from strategy if vault lacks liquidity to fulfill a transfer.
+    function _ensureLiquidity(uint256 needed) internal {
+        uint256 vaultBalance = asset.balanceOf(address(this));
+        if (vaultBalance < needed) {
+            strategy.withdrawToVault(needed - vaultBalance);
+        }
+    }
 
     /// @dev Checks if emergency mode has expired and lifts it if so (HIGH-06 auto-expiry).
     function _checkAndLiftEmergency() internal {

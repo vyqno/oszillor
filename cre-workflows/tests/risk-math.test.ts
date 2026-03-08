@@ -9,6 +9,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   calculateRebaseFactor,
+  calculateTargetEthPct,
   calculateWeightedApy,
   clampFactor,
   riskLevel,
@@ -173,6 +174,49 @@ describe("calculateRebaseFactor", () => {
     expect(factor).toBe(factor2)
     // Verify it's a valid bigint
     expect(typeof factor).toBe("bigint")
+  })
+})
+
+// ──────────────────── Target ETH Allocation (v2) ────────────────────
+
+describe("calculateTargetEthPct", () => {
+  test("SAFE tier: 100% ETH", () => {
+    expect(calculateTargetEthPct(0n)).toBe(10000n)
+    expect(calculateTargetEthPct(20n)).toBe(10000n)
+    expect(calculateTargetEthPct(39n)).toBe(10000n)
+  })
+
+  test("CAUTION tier: 70% ETH", () => {
+    expect(calculateTargetEthPct(40n)).toBe(7000n)
+    expect(calculateTargetEthPct(50n)).toBe(7000n)
+    expect(calculateTargetEthPct(69n)).toBe(7000n)
+  })
+
+  test("DANGER tier: 30% ETH", () => {
+    expect(calculateTargetEthPct(70n)).toBe(3000n)
+    expect(calculateTargetEthPct(80n)).toBe(3000n)
+    expect(calculateTargetEthPct(89n)).toBe(3000n)
+  })
+
+  test("CRITICAL tier: 0% ETH (full hedge)", () => {
+    expect(calculateTargetEthPct(90n)).toBe(0n)
+    expect(calculateTargetEthPct(95n)).toBe(0n)
+    expect(calculateTargetEthPct(100n)).toBe(0n)
+  })
+
+  test("boundary: 39→40 transitions SAFE→CAUTION", () => {
+    expect(calculateTargetEthPct(39n)).toBe(10000n)
+    expect(calculateTargetEthPct(40n)).toBe(7000n)
+  })
+
+  test("boundary: 69→70 transitions CAUTION→DANGER", () => {
+    expect(calculateTargetEthPct(69n)).toBe(7000n)
+    expect(calculateTargetEthPct(70n)).toBe(3000n)
+  })
+
+  test("boundary: 89→90 transitions DANGER→CRITICAL", () => {
+    expect(calculateTargetEthPct(89n)).toBe(3000n)
+    expect(calculateTargetEthPct(90n)).toBe(0n)
   })
 })
 

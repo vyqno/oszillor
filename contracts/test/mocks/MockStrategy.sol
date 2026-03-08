@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVaultStrategy} from "../../src/interfaces/IVaultStrategy.sol";
 
 /// @title MockStrategy
 /// @notice Minimal mock of IVaultStrategy for testing vault integration.
+/// @dev Holds deposited WETH and returns it on withdrawToVault(). stakeEth() is a no-op
+///      so tokens simply sit in the mock (simulating Lido staking without actual protocol).
 contract MockStrategy is IVaultStrategy {
+    IERC20 public asset;
+
     uint256 public lastRebalanceTarget;
     uint256 public rebalanceCallCount;
     uint256 private _totalValue;
@@ -13,7 +18,8 @@ contract MockStrategy is IVaultStrategy {
     uint256 private _stableBal;
     uint256 private _ethPct;
 
-    constructor() {
+    constructor(address _asset) {
+        asset = IERC20(_asset);
         _ethPct = 10_000; // default 100% ETH
     }
 
@@ -26,6 +32,13 @@ contract MockStrategy is IVaultStrategy {
         lastRebalanceTarget = targetEthPct;
         _ethPct = targetEthPct;
         rebalanceCallCount++;
+    }
+
+    function withdrawToVault(uint256 wethNeeded) external returns (uint256) {
+        uint256 available = asset.balanceOf(address(this));
+        uint256 toSend = wethNeeded > available ? available : wethNeeded;
+        if (toSend > 0) asset.transfer(msg.sender, toSend);
+        return toSend;
     }
 
     function totalValueInEth() external view returns (uint256) { return _totalValue; }

@@ -1,10 +1,22 @@
 {
   "schedule": "*/60 * * * * *",
-  "defiLlamaUrl": "https://api.llama.fi/protocols",
+  "coinGeckoUrl": "https://api.coingecko.com/api/v3/coins/ethereum?localization=false&tickers=false&community_data=false&developer_data=false",
+  "defiLlamaUrl": "https://api.llama.fi/v2/chains",
+  "defiLlamaYieldsUrl": "https://yields.llama.fi/pools",
+  "premiumNewsUrl": "https://cryptopanic.com/api/v1/posts/?currencies=ETH&kind=news&filter=hot",
+  "cryptoPanicUrl": "https://cryptopanic.com/api/v1/posts/?auth_token=public&currencies=ETH&kind=news&filter=hot",
+  "llmApiUrl": "https://example.com/mock-oszillor-llm",
+  "llmModel": "oszillor-risk-v1",
+  "llmTimeoutSeconds": 10,
+  "yieldRotationThresholdBps": 100,
+  "newsSecretKey": "",
+  "newsSecretNamespace": "",
+  "newsSecretOwner": "",
   "evms": [
     {
-      "chainName": "base",
+      "chainName": "base-testnet-sepolia",
       "riskEngineAddress": "0x0000000000000000000000000000000000000003",
+      "ethUsdFeedAddress": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
       "gasLimit": "500000"
     }
   ]

@@ -1,18 +1,22 @@
 /**
- * OSZILLOR Event Sentinel — CRE Workflow W2
+ * OSZILLOR Event Sentinel — CRE Workflow W2 (v2)
  *
- * Trigger: Cron every 30 seconds (polls for threats)
- * Flow:    Cron → HTTP (stablecoin data) → Compute (threat classification)
- *          → EVM Write (if emergency detected)
+ * Trigger: Cron every 15 seconds (fast — crash detection is time-critical)
+ * Flow:    Cron → HTTP (CoinGecko ETH + stETH prices) → Compute (crash detection)
+ *          → DON Consensus → EVM Write (if threat detected)
  * Target:  EventSentinel.onReport(bytes metadata, bytes report)
  *
- * Monitors DeFi ecosystem for danger signals:
- * - Stablecoin TVL drops > 10% in 1 hour
- * - Large transfer anomalies
- * - Protocol pause events
+ * Crash detection signals:
+ *   - ETH price drop >5% in 5 min → CRITICAL (emergency halt + full hedge)
+ *   - ETH price drop >3% in 5 min → DANGER (risk adjustment +30)
+ *   - stETH/ETH ratio < 0.97 → CRITICAL (emergency halt + full hedge)
+ *   - stETH/ETH ratio < 0.99 → DANGER (risk adjustment +20)
  *
- * NOTE: Uses Cron trigger for simulation compatibility. In production,
- * this would use EVM Log trigger watching USDC Transfer events.
+ * NOTE: Only writes to chain when a threat is detected. In normal conditions,
+ * it logs "No threat" and skips — saving gas.
+ *
+ * All arithmetic uses bigint — NEVER floating point in consensus paths.
+ * Percentages are scaled by 1000 for integer consensus (e.g., 5.3% = 53).
  */
 import {
   CronCapability,
@@ -45,9 +49,9 @@ type EvmConfig = {
 
 type Config = {
   schedule: string
-  whaleAlertUrl: string
-  tvlThresholdDropPct: number
-  largeTransferThresholdUsd: number
+  coinGeckoEthUrl: string
+  coinGeckoStethUrl: string
+  simulateThreat?: boolean
   evms: EvmConfig[]
 }
 
@@ -67,8 +71,6 @@ type ThreatResult = {
   txHash: string
 }
 
-// ──────────────────── Threat Detection ────────────────────
-
 type ThreatAssessment = {
   level: number
   threatType: string
@@ -78,60 +80,75 @@ type ThreatAssessment = {
   reason: string
 }
 
+// ──────────────────── Crash Detection ────────────────────
+
 /**
- * Fetches stablecoin data and checks for threats.
- * Each DON node evaluates independently; consensus selects median risk adjustment.
+ * Encodes two signals into a single bigint for DON consensus:
+ *   - High 32 bits: ETH price drop scaled by 1000 (e.g., 5300 = 5.3%)
+ *   - Low 32 bits: stETH depeg scaled by 10000 (e.g., 9700 = 0.97 ratio)
+ *
+ * Each node fetches independently; consensus selects the median composite.
  */
-const fetchAndClassifyThreat = (
-  nodeRuntime: NodeRuntime<Config>
-): bigint => {
+const fetchCrashSignals = (nodeRuntime: NodeRuntime<Config>): bigint => {
   const httpClient = new HTTPClient()
 
-  const resp = httpClient
-    .sendRequest(nodeRuntime, {
-      url: nodeRuntime.config.whaleAlertUrl,
-      method: "GET" as const,
-    })
-    .result()
+  let ethDropScaled = 0n // ETH 24h drop * 1000 (for integer precision)
+  let stEthRatioScaled = 10000n // stETH/ETH ratio * 10000 (10000 = 1.0)
 
-  const bodyText = new TextDecoder().decode(resp.body)
-
+  // ── ETH price change detection ──
   try {
-    const data = JSON.parse(bodyText) as {
-      peggedAssets?: Array<{
-        name: string
-        symbol: string
-        circulating?: { peggedUSD?: number }
-        circulatingPrevHour?: { peggedUSD?: number }
-      }>
-    }
+    const ethResp = httpClient
+      .sendRequest(nodeRuntime, {
+        url: nodeRuntime.config.coinGeckoEthUrl,
+        method: "GET" as const,
+      })
+      .result()
 
-    const stablecoins = data.peggedAssets || []
-
-    // Check USDC and USDT specifically
-    const majors = stablecoins.filter(
-      (s) => s.symbol === "USDC" || s.symbol === "USDT" || s.symbol === "DAI"
-    )
-
-    let maxDropPct = 0
-    for (const stable of majors) {
-      const current = stable.circulating?.peggedUSD || 0
-      const prevHour = stable.circulatingPrevHour?.peggedUSD || current
-
-      if (prevHour > 0) {
-        const dropPct = ((prevHour - current) / prevHour) * 100
-        if (dropPct > maxDropPct) {
-          maxDropPct = dropPct
-        }
+    const ethText = new TextDecoder().decode(ethResp.body)
+    const ethData = JSON.parse(ethText) as {
+      market_data?: {
+        price_change_percentage_24h?: number
+        price_change_percentage_1h_in_currency?: { usd?: number }
       }
     }
 
-    // Return drop percentage as risk adjustment (0 = no threat)
-    // Scale to integer for consensus
-    return BigInt(Math.floor(maxDropPct * 10)) // 10x for precision
+    // Use 1h change as proxy for 5-min crash detection in simulation
+    // In production, DON nodes would track rolling 5-min window
+    const priceChange =
+      ethData.market_data?.price_change_percentage_1h_in_currency?.usd ??
+      ethData.market_data?.price_change_percentage_24h ??
+      0
+
+    // Only care about drops (negative values)
+    if (priceChange < 0) {
+      ethDropScaled = BigInt(Math.floor(Math.abs(priceChange) * 1000))
+    }
   } catch {
-    return 0n // No threat if parsing fails
+    // If fetch fails, signal no drop (conservative)
   }
+
+  // ── stETH/ETH ratio ──
+  try {
+    const stethResp = httpClient
+      .sendRequest(nodeRuntime, {
+        url: nodeRuntime.config.coinGeckoStethUrl,
+        method: "GET" as const,
+      })
+      .result()
+
+    const stethText = new TextDecoder().decode(stethResp.body)
+    const stethData = JSON.parse(stethText) as {
+      "staked-ether"?: { eth?: number }
+    }
+
+    const ratio = stethData["staked-ether"]?.eth ?? 1.0
+    stEthRatioScaled = BigInt(Math.floor(ratio * 10000))
+  } catch {
+    // Default to 1.0 ratio if fetch fails
+  }
+
+  // Pack into single bigint: high bits = ethDrop, low bits = stEthRatio
+  return (ethDropScaled << 32n) | stEthRatioScaled
 }
 
 // ──────────────────── Main Workflow ────────────────────
@@ -139,58 +156,96 @@ const fetchAndClassifyThreat = (
 const onCronTrigger = (runtime: Runtime<Config>): ThreatResult => {
   const evmConfig = runtime.config.evms[0]
 
-  // Step 1: Fetch threat data with DON consensus
-  const riskAdjustmentScaled = runtime
-    .runInNodeMode(fetchAndClassifyThreat, consensusMedianAggregation())()
+  // Step 1: Fetch crash signals with DON consensus
+  const composite = runtime
+    .runInNodeMode(fetchCrashSignals, consensusMedianAggregation())()
     .result()
 
-  const dropPctScaled = Number(riskAdjustmentScaled)
-  const dropPct = dropPctScaled / 10 // Restore precision
+  // Unpack composite signal
+  const ethDropScaled = Number(composite >> 32n)
+  const stEthRatioScaled = Number(composite & 0xFFFFFFFFn)
 
-  runtime.log(`Stablecoin max TVL drop: ${dropPct}%`)
+  const ethDropPct = ethDropScaled / 1000 // e.g., 5300 → 5.3%
+  const stEthRatio = stEthRatioScaled / 10000 // e.g., 9700 → 0.97
 
-  // Step 2: Classify threat level
-  let assessment: ThreatAssessment
+  runtime.log(`ETH drop: ${ethDropPct.toFixed(1)}%, stETH ratio: ${stEthRatio.toFixed(4)}`)
 
-  if (dropPct >= 10) {
-    // CRITICAL — major stablecoin event
+  // Step 2: Classify threat — check most severe first
+  let assessment: ThreatAssessment | null = null
+
+  // Check ETH price crash
+  if (ethDropPct >= 5) {
     assessment = {
       level: RISK_LEVEL.CRITICAL,
-      threatType: "STABLECOIN_TVL_CRASH",
-      riskAdjustment: BigInt(Math.min(100, Math.floor(dropPct))),
+      threatType: "ETH_PRICE_CRASH",
+      riskAdjustment: 100n,
       emergencyHalt: true,
-      suggestedDuration: 14400n, // 4 hours max
-      reason: `Major stablecoin TVL drop: ${dropPct.toFixed(1)}%`,
+      suggestedDuration: 14400n, // 4 hours
+      reason: `ETH price crash: -${ethDropPct.toFixed(1)}% (>5% threshold)`,
     }
-  } else if (dropPct >= 5) {
-    // DANGER — significant movement
+  } else if (ethDropPct >= 3) {
     assessment = {
       level: RISK_LEVEL.DANGER,
-      threatType: "STABLECOIN_TVL_DROP",
-      riskAdjustment: BigInt(Math.floor(dropPct * 2)),
+      threatType: "ETH_PRICE_DROP",
+      riskAdjustment: 30n,
       emergencyHalt: false,
       suggestedDuration: 0n,
-      reason: `Stablecoin TVL drop: ${dropPct.toFixed(1)}%`,
+      reason: `ETH price drop: -${ethDropPct.toFixed(1)}% (>3% threshold)`,
     }
-  } else {
-    // No significant threat
-    runtime.log("No threat detected — skipping report")
-    return {
-      threatDetected: false,
-      level: RISK_LEVEL.SAFE,
-      threatType: "0x" + "00".repeat(32) as `0x${string}`,
+  }
+
+  // Check stETH depeg (overrides if more severe)
+  if (stEthRatio < 0.97) {
+    assessment = {
+      level: RISK_LEVEL.CRITICAL,
+      threatType: "STETH_DEPEG_CRITICAL",
+      riskAdjustment: 100n,
+      emergencyHalt: true,
+      suggestedDuration: 14400n, // 4 hours
+      reason: `stETH depeg: ratio=${stEthRatio.toFixed(4)} (<0.97 critical threshold)`,
+    }
+  } else if (stEthRatio < 0.99 && (!assessment || assessment.level < RISK_LEVEL.DANGER)) {
+    assessment = {
+      level: RISK_LEVEL.DANGER,
+      threatType: "STETH_DEPEG_WARNING",
+      riskAdjustment: 20n,
       emergencyHalt: false,
-      txHash: "0x",
+      suggestedDuration: 0n,
+      reason: `stETH depeg warning: ratio=${stEthRatio.toFixed(4)} (<0.99 threshold)`,
+    }
+  }
+
+  // No threat detected — in production, skip writing to save gas.
+  // In staging/demo mode (simulateThreat=true), always write to demonstrate
+  // the full pipeline with a simulated crash detection.
+  if (!assessment) {
+    if (runtime.config.simulateThreat) {
+      runtime.log("No live threat — simulating crash detection for demo")
+      assessment = {
+        level: RISK_LEVEL.CRITICAL,
+        threatType: "SIMULATED_STETH_DEPEG",
+        riskAdjustment: 100n,
+        emergencyHalt: true,
+        suggestedDuration: 14400n,
+        reason: `Simulated: stETH depeg detected (ratio=${stEthRatio.toFixed(4)}), ETH drop=${ethDropPct.toFixed(1)}% — emergency halt triggered`,
+      }
+    } else {
+      runtime.log("No threat detected — skipping report")
+      return {
+        threatDetected: false,
+        level: RISK_LEVEL.SAFE,
+        threatType: ("0x" + "00".repeat(32)) as `0x${string}`,
+        emergencyHalt: false,
+        txHash: "0x",
+      }
     }
   }
 
   runtime.log(
-    `Threat detected: ${assessment.threatType}, emergency=${assessment.emergencyHalt}`
+    `Threat detected: ${assessment.threatType}, level=${assessment.level}, emergency=${assessment.emergencyHalt}`
   )
 
   // Step 3: ABI-encode ThreatReport struct
-  // Matches: struct ThreatReport { RiskLevel level (uint8), bytes32 threatType,
-  //          uint256 riskAdjustment, bool emergencyHalt, uint256 suggestedDuration, string reason }
   const threatTypeBytes = pad(
     keccak256(toHex(assessment.threatType)),
     { size: 32 }

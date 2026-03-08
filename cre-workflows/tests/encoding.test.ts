@@ -69,6 +69,64 @@ describe("RebaseReport encoding", () => {
   })
 })
 
+// ──────────────────── RebalanceReport Encoding (v2) ────────────────────
+
+describe("RebalanceReport encoding", () => {
+  const rebalanceParams = parseAbiParameters(
+    "uint256 rebaseFactor, uint256 currentRiskScore, uint256 targetEthPct, uint256 weightedApyBps, uint256 timeDelta"
+  )
+
+  test("encodes valid RebalanceReport", () => {
+    const encoded = encodeAbiParameters(rebalanceParams, [
+      1_005_000_000_000_000_000n, // 1.005e18
+      50n, // risk score
+      7000n, // 70% ETH (CAUTION)
+      280n, // effective APY = 4% * 70% = 2.8%
+      300n, // 5 minutes
+    ])
+
+    expect(encoded).toStartWith("0x")
+    // 5 x 32-byte words = 320 hex chars + "0x" prefix
+    expect(encoded.length).toBe(2 + 320)
+
+    // Round-trip decode
+    const decoded = decodeAbiParameters(rebalanceParams, encoded)
+    expect(decoded[0]).toBe(1_005_000_000_000_000_000n)
+    expect(decoded[1]).toBe(50n)
+    expect(decoded[2]).toBe(7000n)
+    expect(decoded[3]).toBe(280n)
+    expect(decoded[4]).toBe(300n)
+  })
+
+  test("encodes full hedge (CRITICAL)", () => {
+    const encoded = encodeAbiParameters(rebalanceParams, [
+      995_000_000_000_000_000n, // CRITICAL factor
+      95n,
+      0n, // 0% ETH — full hedge
+      0n,
+      300n,
+    ])
+
+    const decoded = decodeAbiParameters(rebalanceParams, encoded)
+    expect(decoded[0]).toBe(995_000_000_000_000_000n)
+    expect(decoded[2]).toBe(0n) // targetEthPct = 0
+  })
+
+  test("encodes full ETH (SAFE)", () => {
+    const encoded = encodeAbiParameters(rebalanceParams, [
+      1_005_000_000_000_000_000n,
+      20n,
+      10000n, // 100% ETH
+      400n, // full 4% Lido APY
+      300n,
+    ])
+
+    const decoded = decodeAbiParameters(rebalanceParams, encoded)
+    expect(decoded[2]).toBe(10000n) // targetEthPct = 100%
+    expect(decoded[3]).toBe(400n) // full staking yield
+  })
+})
+
 // ──────────────────── RiskReport Encoding ────────────────────
 
 describe("RiskReport encoding", () => {

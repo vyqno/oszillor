@@ -5,8 +5,7 @@
 # ── Foundry ──
 contracts/cache/
 contracts/out/
-contracts/broadcast/*/31337/
-contracts/broadcast/**/dry-run/
+contracts/broadcast/
 contracts/lib/
 
 # ── Dependencies ──
@@ -20,6 +19,11 @@ build/
 out/
 .next/
 .nuxt/
+
+# ── CRE workflow artifacts ──
+**/tmp.js
+**/tmp.wasm
+bun.lock
 
 # ── Environment ──
 .env
@@ -42,6 +46,8 @@ progress/
 .references/
 .serena/
 .claude/
+cre-docs/
+
 
 # ── Logs ──
 logs/
@@ -79,9 +85,19 @@ tmp/
 temp/
 *.tmp
 *.bak
+*.resolved
+tmp.json
+demo/.*_cache.json
+
+# ── Stale root files ──
+image.png
+brand.md
+front.md
+simulations/
 
 # ── Python ──
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+cre-docs/

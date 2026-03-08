@@ -31,7 +31,7 @@ contract DepositWithdrawFuzzTest is Test {
 
         vm.startPrank(admin);
 
-        MockStrategy strategy = new MockStrategy();
+        MockStrategy strategy = new MockStrategy(address(usdc));
         token = new OszillorToken("OSZILLOR", "OSZ", admin);
         vault = new OszillorVault(
             address(usdc),

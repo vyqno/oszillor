@@ -42,7 +42,7 @@ contract OszillorVaultTest is Test {
         vm.warp(1_700_000_000);
 
         usdc = new MockERC20();
-        strategy = new MockStrategy();
+        strategy = new MockStrategy(address(usdc));
 
         vm.startPrank(admin);
 
@@ -146,7 +146,8 @@ contract OszillorVaultTest is Test {
 
         assertGt(shares, 0);
         assertEq(vault.totalAssets(), 100e18);
-        assertEq(usdc.balanceOf(address(vault)), 100e18);
+        // WETH routed to strategy for yield deployment
+        assertEq(usdc.balanceOf(address(strategy)), 100e18);
         assertGt(token.sharesOf(alice), 0);
     }
 
@@ -563,15 +564,17 @@ contract OszillorVaultTest is Test {
         assertGt(accrued, 0);
 
         uint256 recipientBefore = usdc.balanceOf(feeRecipient);
-        uint256 vaultBalBefore = usdc.balanceOf(address(vault));
+        uint256 stratBalBefore = usdc.balanceOf(address(strategy));
 
         vm.prank(feeWithdrawer);
         vault.withdrawFees();
 
         // Fee recipient got exactly accrued fees
         assertEq(usdc.balanceOf(feeRecipient), recipientBefore + accrued);
-        // Vault still holds the rest (user deposits minus fees)
-        assertEq(usdc.balanceOf(address(vault)), vaultBalBefore - accrued);
+        // Strategy balance decreased by fee amount (pulled to vault, then to recipient)
+        assertEq(usdc.balanceOf(address(strategy)), stratBalBefore - accrued);
+        // Vault should have 0 after forwarding fees
+        assertEq(usdc.balanceOf(address(vault)), 0);
     }
 
     function test_fees_withdrawRevertsIfZero() public {
@@ -613,8 +616,9 @@ contract OszillorVaultTest is Test {
 
         // totalAssets should NOT include the donation
         assertEq(vault.totalAssets(), 100e18);
-        // But raw balance has more
-        assertEq(usdc.balanceOf(address(vault)), 1_000_100e18);
+        // Vault only has donation (deposit routed to strategy)
+        assertEq(usdc.balanceOf(address(vault)), 1_000_000e18);
+        assertEq(usdc.balanceOf(address(strategy)), 100e18);
     }
 
     function test_donationAttack_sharePriceUnchanged() public {

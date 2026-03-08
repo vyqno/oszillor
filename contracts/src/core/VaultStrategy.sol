@@ -58,6 +58,7 @@ contract VaultStrategy is IVaultStrategy, AccessControl {
     event HedgedToStable(uint256 wethIn, uint256 usdcOut);
     event Unhedged(uint256 usdcIn, uint256 wethOut);
     event RebalanceExecuted(uint256 targetEthPct, uint256 resultEthPct);
+    event FundsReturnedToVault(uint256 wethSent);
 
     // ──────────────────── Constructor ────────────────────
 
@@ -157,6 +158,36 @@ contract VaultStrategy is IVaultStrategy, AccessControl {
         }
 
         emit RebalanceExecuted(targetEthPct, currentEthPct());
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //                     VAULT LIQUIDITY
+    // ══════════════════════════════════════════════════════════════
+
+    /// @inheritdoc IVaultStrategy
+    function withdrawToVault(uint256 wethNeeded) external onlyRole(Roles.STRATEGY_MANAGER_ROLE) returns (uint256) {
+        if (wethNeeded == 0) return 0;
+
+        uint256 wethAvailable = weth.balanceOf(address(this));
+
+        // If not enough idle WETH, unstake from Lido
+        if (wethAvailable < wethNeeded && address(lido) != address(0)) {
+            uint256 toUnstake = wethNeeded - wethAvailable;
+            uint256 stEthBal = lido.balanceOf(address(this));
+            if (toUnstake > stEthBal) toUnstake = stEthBal;
+            if (toUnstake > 0) {
+                uint256 wethBefore = weth.balanceOf(address(this));
+                lido.safeTransfer(address(lido), toUnstake);
+                wethAvailable = weth.balanceOf(address(this));
+                emit Unstaked(toUnstake, wethAvailable - wethBefore);
+            }
+        }
+
+        uint256 toSend = wethNeeded > wethAvailable ? wethAvailable : wethNeeded;
+        if (toSend > 0) weth.safeTransfer(msg.sender, toSend);
+
+        emit FundsReturnedToVault(toSend);
+        return toSend;
     }
 
     // ══════════════════════════════════════════════════════════════

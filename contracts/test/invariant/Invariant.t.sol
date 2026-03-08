@@ -37,7 +37,7 @@ contract OszillorInvariantTest is StdInvariant, Test {
         vm.warp(1_700_000_000);
 
         usdc = new MockERC20();
-        MockStrategy strategy = new MockStrategy();
+        MockStrategy strategy = new MockStrategy(address(usdc));
 
         vm.startPrank(admin);
 

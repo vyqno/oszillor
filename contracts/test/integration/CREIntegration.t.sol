@@ -53,7 +53,7 @@ contract CREIntegrationTest is Test {
 
         usdc = new MockERC20();
         pausable = new MockPausable();
-        strategy = new MockStrategy();
+        strategy = new MockStrategy(address(usdc));
         token = new OszillorToken("OSZILLOR", "OSZ", admin);
 
         // Predict vault address — modules need it at construction time

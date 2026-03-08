@@ -26,6 +26,11 @@ interface IVaultStrategy {
     /// @param targetEthPct Target ETH allocation in bps (10000 = 100% ETH, 0 = 100% USDC).
     function rebalance(uint256 targetEthPct) external;
 
+    /// @notice Withdraws WETH from strategy back to vault, unstaking from Lido if needed.
+    /// @param wethNeeded Amount of WETH the vault needs.
+    /// @return sent Actual WETH sent to the vault (may be less if insufficient positions).
+    function withdrawToVault(uint256 wethNeeded) external returns (uint256 sent);
+
     /// @notice Returns the total strategy value denominated in WETH.
     /// @return Total NAV in WETH (18 decimals), including WETH + stETH + USDC→ETH conversion.
     function totalValueInEth() external view returns (uint256);

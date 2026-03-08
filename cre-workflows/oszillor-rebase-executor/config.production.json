@@ -1,9 +1,11 @@
 {
   "schedule": "*/300 * * * * *",
+  "stakingApyBps": 400,
   "evms": [
     {
       "chainName": "base",
       "vaultAddress": "0x0000000000000000000000000000000000000001",
+      "strategyAddress": "0x0000000000000000000000000000000000000003",
       "rebaseExecutorAddress": "0x0000000000000000000000000000000000000002",
       "gasLimit": "500000"
     }

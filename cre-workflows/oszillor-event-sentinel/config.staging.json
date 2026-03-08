@@ -1,13 +1,13 @@
 {
-  "schedule": "*/30 * * * * *",
-  "whaleAlertUrl": "https://api.llama.fi/stablecoins",
-  "tvlThresholdDropPct": 10,
-  "largeTransferThresholdUsd": 10000000,
-  "evms": [
-    {
-      "chainName": "ethereum-testnet-sepolia",
-      "eventSentinelAddress": "0x0000000000000000000000000000000000000004",
-      "gasLimit": "500000"
-    }
-  ]
+    "schedule":  "*/15 * * * * *",
+    "coinGeckoEthUrl":  "https://api.coingecko.com/api/v3/coins/ethereum?localization=false\u0026tickers=false\u0026community_data=false\u0026developer_data=false",
+    "coinGeckoStethUrl":  "https://api.coingecko.com/api/v3/simple/price?ids=staked-ether,ethereum\u0026vs_currencies=eth,usd",
+    "simulateThreat":  true,
+    "evms":  [
+                 {
+                     "chainName":  "ethereum-testnet-sepolia",
+                     "eventSentinelAddress":  "0x0490c9a22e1dc8084fe18f8977a81bb42e5b341f",
+                     "gasLimit":  "500000"
+                 }
+             ]
 }
